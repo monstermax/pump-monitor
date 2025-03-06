@@ -71,8 +71,8 @@ export class WebApp extends ServiceAbstract {
 
         this.tokenManager.on('new_token_added', this.handleNewToken.bind(this))
         this.tokenManager.on('new_trade_added', this.handleNewTrade.bind(this))
-        this.tokenManager.on('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
-        this.tokenManager.on('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
+        this.tokenAnalyzer.on('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
+        this.tokenAnalyzer.on('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
 
 
         super.started();
@@ -97,8 +97,8 @@ export class WebApp extends ServiceAbstract {
 
         this.tokenManager.off('new_token_added', this.handleNewToken.bind(this))
         this.tokenManager.off('new_trade_added', this.handleNewTrade.bind(this))
-        this.tokenManager.off('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
-        this.tokenManager.off('token_analysis_updated', this.handleNewTokenAnalysis.bind(this))
+        this.tokenAnalyzer.off('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
+        this.tokenAnalyzer.off('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
 
 
         super.stopped();
