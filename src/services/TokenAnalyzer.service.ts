@@ -69,6 +69,17 @@ export class TokenAnalyzer extends ServiceAbstract {
         // Enregistrement de l'analyse
         this.db.addTokenAnalysis(analysis);
         this.emit('token_analysis_added', analysis);
+
+
+        // Vérifier si le token représente une opportunité d'achat
+        if (analysis && analysis.initialOpportunity.score >= 60 && analysis.initialOpportunity.recommendedAmount > 0.001) {
+            this.emit('buy_opportunity', analysis.initialOpportunity);
+
+            // Acheter automatiquement si configuré
+            if (this.trading.isAutoTradingEnabled()) {
+                await this.autoBuy(token, analysis.initialOpportunity);
+            }
+        }
     }
 
 
@@ -87,18 +98,8 @@ export class TokenAnalyzer extends ServiceAbstract {
 
 
         // Mise à jour de l'analyse avec les données du trade
-        const analysis = this.updateTokenAnalysisAfterTrade(token, trade);
+        this.updateTokenAnalysisAfterTrade(token, trade);
 
-
-        // Vérifier si le token représente une opportunité d'achat
-        if (analysis && analysis.initialOpportunity.score >= 60 && analysis.initialOpportunity.recommendedAmount > 0.001) {
-            this.emit('buy_opportunity', analysis.initialOpportunity);
-
-            // Acheter automatiquement si configuré
-            if (this.trading.isAutoTradingEnabled()) {
-                await this.autoBuy(token, analysis.initialOpportunity);
-            }
-        }
 
     }
 
@@ -189,14 +190,14 @@ export class TokenAnalyzer extends ServiceAbstract {
 
 
     /** Mise à jour de l'analyse d'un token après un trade (buy/sell) */
-    private updateTokenAnalysisAfterTrade(token: Token, trade: Trade): TokenAnalysis | null {
+    private updateTokenAnalysisAfterTrade(token: Token, trade: Trade): void {
 
         // Chargement de l'analyse
         const analysis: TokenAnalysis | null = this.db.getTokenAnalysis(trade.tokenAddress);
 
         if (! analysis) {
             this.warn(`Analyse du Token ${trade.tokenAddress} non trouvée pour ${trade.type} ${trade.solAmount.toFixed(3)} SOL par ${trade.traderAddress}`);
-            return analysis;
+            return;
         }
 
 
@@ -259,7 +260,7 @@ export class TokenAnalyzer extends ServiceAbstract {
             this.emit('token_analysis_updated', analysis);
         }
 
-        return analysis;
+        return;
     }
 
 
