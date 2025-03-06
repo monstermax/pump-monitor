@@ -72,7 +72,7 @@ export class TokenAnalyzer extends ServiceAbstract {
 
 
         // Vérifier si le token représente une opportunité d'achat
-        if (analysis && analysis.initialOpportunity.score >= 60 && analysis.initialOpportunity.recommendedAmount > 0.001) {
+        if (analysis.initialOpportunity.score >= 60 && analysis.initialOpportunity.recommendedAmount > 0.001) {
             this.emit('buy_opportunity', analysis.initialOpportunity);
 
             // Acheter automatiquement si configuré
