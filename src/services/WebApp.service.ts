@@ -364,12 +364,8 @@ export class WebApp extends ServiceAbstract {
     }
 
 
-    handleNewToken(trade: Trade) {
-        const token = this.db.getTokenByAddress(trade.tokenAddress);
-
-        if (token) {
-            this.emitTokenCreation(token);
-        }
+    handleNewToken(token: Token) {
+        this.emitTokenCreation(token);
     }
 
 

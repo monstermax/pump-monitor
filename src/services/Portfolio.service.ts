@@ -8,6 +8,7 @@ import { Portfolio, PortfolioHolding, PortfolioSettings, PortfolioStats, Portfol
 import { appConfig } from "../env";
 import { MagicConnection } from "../lib/solana/MagicConnection";
 import { getTokenBalance } from "../lib/solana/account";
+import base58 from "bs58";
 
 /* ######################################################### */
 
@@ -41,6 +42,9 @@ export class PortfolioManager extends ServiceAbstract {
         if (this.status !== 'stopped') return;
         super.start();
 
+        this.wallet = this.initializeWallet();
+        this.initializeSettings();
+
         this.updateBalanceSol();
 
         this.updateTokensHoldings();
@@ -72,6 +76,31 @@ export class PortfolioManager extends ServiceAbstract {
 
         super.stopped();
     }
+
+
+
+    /** Initialize le wallet */
+    private initializeWallet(): Keypair | null {
+        // Récupérer la private key depuis les variables d'environnement
+        const privateKeyString = appConfig.solana.WalletPrivateKey;
+
+        if (!privateKeyString) {
+            //throw new Error('WALLET_PRIVATE_KEY environment variable is not set');
+            console.warn(`WALLET_PRIVATE_KEY environment variable is not set`);
+            return null;
+        }
+
+        try {
+            // Convertir la private key en Uint8Array pour créer le Keypair
+            const privateKeyBytes = base58.decode(privateKeyString);
+            return Keypair.fromSecretKey(privateKeyBytes);
+
+        } catch (err: any) {
+            console.error('Failed to initialize wallet:', err);
+            throw new Error('Failed to initialize wallet. Check WALLET_PRIVATE_KEY format.');
+        }
+    }
+
 
 
     private handleNewTrade(trade: Trade) {
@@ -432,6 +461,14 @@ export class PortfolioManager extends ServiceAbstract {
         } catch (err: any) {
             this.error(`Error fetching metadata for token ${mintAddress} from Pump.fun API: ${err.message}`);
             return null;
+        }
+    }
+
+
+    // Initialiser les settings par défaut si nécessaire
+    private initializeSettings(): void {
+        if (!this.portfolioSettings) {
+            this.portfolioSettings = appConfig.trading;
         }
     }
 

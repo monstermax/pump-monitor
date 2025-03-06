@@ -66,8 +66,8 @@ export interface TokenKpi {
     marketCapUSDMax: number;
     holdersMin: number;
     holdersMax: number;
-    devBalanceMin: number | null;
-    devBalanceMax: number | null;
+    devBalanceMin: number | null; // TODO: a remplacer par devPercentageMin
+    devBalanceMax: number | null; // TODO: a remplacer par devPercentageMax
 };
 
 
