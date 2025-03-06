@@ -87,7 +87,18 @@ export class TokenAnalyzer extends ServiceAbstract {
 
 
         // Mise à jour de l'analyse avec les données du trade
-        this.updateTokenAnalysisAfterTrade(token, trade);
+        const analysis = this.updateTokenAnalysisAfterTrade(token, trade);
+
+
+        // Vérifier si le token représente une opportunité d'achat
+        if (analysis && analysis.initialOpportunity.score >= 60 && analysis.initialOpportunity.recommendedAmount > 0.001) {
+            this.emit('buy_opportunity', analysis.initialOpportunity);
+
+            // Acheter automatiquement si configuré
+            if (this.trading.isAutoTradingEnabled()) {
+                await this.autoBuy(token, analysis.initialOpportunity);
+            }
+        }
 
     }
 
@@ -178,14 +189,14 @@ export class TokenAnalyzer extends ServiceAbstract {
 
 
     /** Mise à jour de l'analyse d'un token après un trade (buy/sell) */
-    private updateTokenAnalysisAfterTrade(token: Token, trade: Trade): void {
+    private updateTokenAnalysisAfterTrade(token: Token, trade: Trade): TokenAnalysis | null {
 
         // Chargement de l'analyse
         const analysis: TokenAnalysis | null = this.db.getTokenAnalysis(trade.tokenAddress);
 
         if (! analysis) {
             this.warn(`Analyse du Token ${trade.tokenAddress} non trouvée pour ${trade.type} ${trade.solAmount.toFixed(3)} SOL par ${trade.traderAddress}`);
-            return;
+            return analysis;
         }
 
 
@@ -247,8 +258,42 @@ export class TokenAnalyzer extends ServiceAbstract {
         if (this.db.updateTokenAnalysis(trade.tokenAddress, updatedAnalysis)) {
             this.emit('token_analysis_updated', analysis);
         }
+
+        return analysis;
     }
 
+
+    /** Achète un token de facon automatisée suite à une opportunité d'achat */
+    private async autoBuy(newToken: Token, opportunity: OpportunityAnalysis) {
+        this.log(`AUTO-BUY triggered for ${newToken.symbol} (Score: ${opportunity.score})`);
+
+        // Vérifier si on peut acheter
+        const canBuyResult = await this.portfolio.canBuyToken(
+            newToken.address,
+            opportunity.score,
+            opportunity.recommendedAmount
+        );
+
+        if (canBuyResult.canBuy) {
+            // Exécuter l'achat automatique
+            const result = await this.trading.buyToken(
+                newToken,
+                canBuyResult.recommendedAmount || opportunity.recommendedAmount
+            );
+
+            if (result.success) {
+                this.log(`AUTO-BUY success: Bought ${result.tokenAmount} ${newToken.symbol} for ${result.solAmount.toFixed(4)} SOL`);
+                this.emit('autobuy_success', newToken.address);
+
+            } else {
+                this.error(`AUTO-BUY failed: ${result.error}`);
+                this.emit('autobuy_failed', newToken.address);
+            }
+
+        } else {
+            this.log(`AUTO-BUY skipped: ${canBuyResult.reason}`);
+        }
+    }
 
 }
 

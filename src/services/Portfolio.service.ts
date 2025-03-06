@@ -44,6 +44,7 @@ export class PortfolioManager extends ServiceAbstract {
 
         this.wallet = this.initializeWallet();
         this.initializeSettings();
+        this.initializeStats();
 
         this.updateBalanceSol();
 
@@ -473,6 +474,11 @@ export class PortfolioManager extends ServiceAbstract {
     }
 
 
+    private initializeStats(): void {
+        this.portfolioStats = this.getEmptyStats();
+    }
+
+
     // Mettre à jour les settings
     updateSettings(newSettings: Partial<PortfolioSettings>): void {
         if (! this.portfolioSettings) {
@@ -489,23 +495,7 @@ export class PortfolioManager extends ServiceAbstract {
 
         if (holdings.length === 0) {
             // Réinitialiser les stats si aucun holding
-            this.portfolioStats = {
-                totalValue: 0,
-                totalInvestment: 0,
-                totalProfitLoss: 0,
-                totalProfitLossPercent: 0,
-                bestPerforming: {
-                    tokenAddress: '',
-                    tokenSymbol: '',
-                    profitLossPercent: 0
-                },
-                worstPerforming: {
-                    tokenAddress: '',
-                    tokenSymbol: '',
-                    profitLossPercent: 0
-                },
-                lastUpdated: new Date()
-            };
+            this.portfolioStats = this.getEmptyStats();
 
             return;
         }
@@ -674,8 +664,12 @@ export class PortfolioManager extends ServiceAbstract {
         const stats = this.portfolioStats;
         const holdings = this.db.getAllHoldings();
 
-        if (! settings || ! stats) {
-            return { canBuy: false, reason: 'settings et/ou stats manquants' };
+        if (! settings) {
+            return { canBuy: false, reason: 'settings manquants' };
+        }
+
+        if (! stats) {
+            return { canBuy: false, reason: 'stats manquants' };
         }
 
         // Montant à investir
