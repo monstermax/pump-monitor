@@ -6,6 +6,11 @@ import { appConfig } from "../../env";
 import { sleep } from "../utils/time.util";
 
 
+export type MethodsOf<T> = {
+    [K in keyof T]: T[K] extends Function ? K : never
+}[keyof T];
+
+
 export type MagicConnectionOptions = {
     rpcs: string[],
     maxRetries?: number,
@@ -15,14 +20,17 @@ export type MagicConnectionOptions = {
 
 
 export class MagicConnection extends Connection {
-    private proxyOptions: MagicConnectionOptions;
+    public proxyOptions: MagicConnectionOptions;
 
     constructor(proxyOptions: MagicConnectionOptions, commitmentOrConfig?: Commitment | ConnectionConfig) {
         super(proxyOptions.rpcs[0], commitmentOrConfig);
         this.proxyOptions = proxyOptions;
     }
 
+
     getParsedTransaction(signature: TransactionSignature, commitmentOrConfig?: GetVersionedTransactionConfig | Finality): Promise<ParsedTransactionWithMeta | null> {
+        return MagicConnectionMethodWrapper(this, 'getParsedTransaction', signature, commitmentOrConfig);
+
         const promise = async (connection: Connection) => {
             return connection.getParsedTransaction(signature, commitmentOrConfig);
         };
@@ -30,7 +38,10 @@ export class MagicConnection extends Connection {
         return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
     }
 
+
     getBalance(publicKey: PublicKey, commitmentOrConfig?: Commitment | GetBalanceConfig): Promise<number> {
+        return MagicConnectionMethodWrapper(this, 'getBalance', publicKey, commitmentOrConfig);
+
         const promise = async (connection: Connection) => {
             return connection.getBalance(publicKey, commitmentOrConfig);
         };
@@ -38,10 +49,13 @@ export class MagicConnection extends Connection {
         return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
     }
 
+
     getParsedTokenAccountsByOwner(ownerAddress: PublicKey, filter: TokenAccountsFilter, commitment?: Commitment): Promise<RpcResponseAndContext<Array<{
         pubkey: PublicKey;
         account: AccountInfo<ParsedAccountData>;
     }>>> {
+        return MagicConnectionMethodWrapper(this, 'getParsedTokenAccountsByOwner', ownerAddress, filter, commitment);
+
         const promise = async (connection: Connection) => {
             return connection.getParsedTokenAccountsByOwner(ownerAddress, filter, commitment);
         };
@@ -91,14 +105,47 @@ export class MagicConnection extends Connection {
 
 
     getAccountInfo(publicKey: PublicKey, commitmentOrConfig?: Commitment | GetAccountInfoConfig): Promise<AccountInfo<Buffer> | null> {
+        return MagicConnectionMethodWrapper(this, 'getAccountInfo', publicKey, commitmentOrConfig);
+
         const promise = async (connection: Connection) => {
             return connection.getAccountInfo(publicKey, commitmentOrConfig);
         };
 
         return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
+
     }
 }
 
+
+
+export async function MagicConnectionMethodWrapper<T>(
+    classInstance: MagicConnection,
+    methodName: MethodsOf<Connection>,
+    ...args: any[]
+): Promise<T> {
+    // Créer une fonction qui appelle la méthode sur une instance de Connection
+    const promise = async (connection: Connection) => {
+        // Récupérer la méthode à partir du nom
+        const method = connection[methodName] as (...args: any[]) => Promise<T>;
+
+        // Vérifier que la méthode existe et est une fonction
+        if (typeof method !== 'function') {
+            throw new Error(`La méthode ${String(methodName)} n'existe pas ou n'est pas une fonction`);
+        }
+
+        // Appeler la méthode avec les arguments fournis
+        return method.apply(connection, args);
+    };
+
+    // Utiliser MagicConnectionMethod pour exécuter la promesse sur plusieurs RPCs
+    return MagicConnectionMethod<T>(
+        promise,
+        classInstance.proxyOptions.rpcs,
+        classInstance.proxyOptions.maxRetries,
+        classInstance.proxyOptions.timeout,
+        methodName
+    );
+}
 
 
 
@@ -106,7 +153,8 @@ export async function MagicConnectionMethod<T>(
     executor: (connection: Connection) => Promise<T>,
     rpcs: string[],
     maxRetries = 3,
-    timeout = 15000
+    timeout = 15000,
+    methodName?: string
 ): Promise<T> {
 
     // Créer une map pour stocker les erreurs par RPC
@@ -123,7 +171,7 @@ export async function MagicConnectionMethod<T>(
                 const result = await executor(connection);
 
                 if (result) {
-                    console.log(`[RPC ${rpcUrl}] Résultat trouvé ✅`);
+                    console.log(`[RPC ${rpcUrl}] Résultat trouvé ${methodName ? `(${methodName})` : ''} ✅`);
                     return result;
 
                 } else {

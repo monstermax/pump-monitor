@@ -120,6 +120,7 @@ export class TokenManager extends ServiceAbstract {
         this.db.setToken(token);
     }
 
+
     // Méthode auxiliaire pour mettre à jour les KPIs du token
     private updateTokenKpis(token: Token, trade: Trade): void {
         // Mettre à jour les prix min/max
@@ -144,6 +145,7 @@ export class TokenManager extends ServiceAbstract {
             token.kpis.marketCapUSDMax = trade.marketCapUSD;
         }
     }
+
 
     // Méthode auxiliaire pour mettre à jour les holders du token
     private updateTokenHolders(token: Token, trade: Trade): void {

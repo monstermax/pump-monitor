@@ -243,7 +243,7 @@ export class PortfolioManager extends ServiceAbstract {
                 const existingHolding = this.db.getTokenHolding(mintAddress);
 
                 // Ignorer les tokens avec solde 0
-                if (amount <= 0.000001) {
+                if (amount <= 0.000001 && this.db.getTokenHolding(mintAddress)) {
                     this.db.deleteTokenHolding(mintAddress);
                     continue;
                 }
