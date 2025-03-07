@@ -15,6 +15,7 @@ export type MagicConnectionOptions = {
     rpcs: string[],
     maxRetries?: number,
     timeout?: number,
+    maxRpcs?: number,
 };
 
 
@@ -30,23 +31,11 @@ export class MagicConnection extends Connection {
 
     getParsedTransaction(signature: TransactionSignature, commitmentOrConfig?: GetVersionedTransactionConfig | Finality): Promise<ParsedTransactionWithMeta | null> {
         return MagicConnectionMethodWrapper(this, 'getParsedTransaction', signature, commitmentOrConfig);
-
-        const promise = async (connection: Connection) => {
-            return connection.getParsedTransaction(signature, commitmentOrConfig);
-        };
-
-        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
     }
 
 
     getBalance(publicKey: PublicKey, commitmentOrConfig?: Commitment | GetBalanceConfig): Promise<number> {
         return MagicConnectionMethodWrapper(this, 'getBalance', publicKey, commitmentOrConfig);
-
-        const promise = async (connection: Connection) => {
-            return connection.getBalance(publicKey, commitmentOrConfig);
-        };
-
-        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
     }
 
 
@@ -55,12 +44,6 @@ export class MagicConnection extends Connection {
         account: AccountInfo<ParsedAccountData>;
     }>>> {
         return MagicConnectionMethodWrapper(this, 'getParsedTokenAccountsByOwner', ownerAddress, filter, commitment);
-
-        const promise = async (connection: Connection) => {
-            return connection.getParsedTokenAccountsByOwner(ownerAddress, filter, commitment);
-        };
-
-        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
     }
 
 
@@ -85,7 +68,7 @@ export class MagicConnection extends Connection {
             }
         };
 
-        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
+        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout, this.proxyOptions.maxRpcs, 'simulateTransaction');
     }
 
 
@@ -100,19 +83,12 @@ export class MagicConnection extends Connection {
                 : connection.sendTransaction(arg1, arg2, arg3);
         };
 
-        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
+        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout, this.proxyOptions.maxRpcs, 'sendTransaction');
     }
 
 
     getAccountInfo(publicKey: PublicKey, commitmentOrConfig?: Commitment | GetAccountInfoConfig): Promise<AccountInfo<Buffer> | null> {
         return MagicConnectionMethodWrapper(this, 'getAccountInfo', publicKey, commitmentOrConfig);
-
-        const promise = async (connection: Connection) => {
-            return connection.getAccountInfo(publicKey, commitmentOrConfig);
-        };
-
-        return MagicConnectionMethod(promise, this.proxyOptions.rpcs, this.proxyOptions.maxRetries, this.proxyOptions.timeout);
-
     }
 }
 
@@ -143,6 +119,7 @@ export async function MagicConnectionMethodWrapper<T>(
         classInstance.proxyOptions.rpcs,
         classInstance.proxyOptions.maxRetries,
         classInstance.proxyOptions.timeout,
+        classInstance.proxyOptions.maxRpcs,
         methodName
     );
 }
@@ -154,14 +131,17 @@ export async function MagicConnectionMethod<T>(
     rpcs: string[],
     maxRetries = 3,
     timeout = 15000,
+    maxRpcs = 5,
     methodName?: string
 ): Promise<T> {
+
+    const elligiblesRpcs = maxRpcs ? [...rpcs].sort((a,b) => Math.random() - 0.5).slice(0, maxRpcs) : rpcs;
 
     // Créer une map pour stocker les erreurs par RPC
     const errors = new Map<string, string>();
 
     // Créer les promesses pour chaque RPC
-    const promises = rpcs.map(async (rpcUrl) => {
+    const promises = elligiblesRpcs.map(async (rpcUrl) => {
         const connection = new Connection(rpcUrl);
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -171,7 +151,7 @@ export async function MagicConnectionMethod<T>(
                 const result = await executor(connection);
 
                 if (result) {
-                    console.log(`[RPC ${rpcUrl}] Résultat trouvé ${methodName ? `(${methodName})` : ''} ✅`);
+                    //console.log(`[RPC ${rpcUrl}] Résultat trouvé ${methodName ? `(${methodName})` : ''} ✅`);
                     return result;
 
                 } else {

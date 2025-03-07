@@ -274,7 +274,16 @@ export class Database extends ServiceAbstract {
 
     async connectToMongo() {
         if (!this.mongoClient) {
-            this.mongoClient = new MongoClient(appConfig.mongodb.uri);
+            this.mongoClient = new MongoClient(appConfig.mongodb.uri, {
+                connectTimeoutMS: 30000,
+                socketTimeoutMS: 45000,
+                serverSelectionTimeoutMS: 30000,
+                maxIdleTimeMS: 120000,
+                waitQueueTimeoutMS: 30000,
+                heartbeatFrequencyMS: 10000,
+                retryWrites: true,
+                retryReads: true,
+            });
 
             await this.mongoClient.connect();
             this.mongoDb = this.mongoClient.db(appConfig.mongodb.dbName);

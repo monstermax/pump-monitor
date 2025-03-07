@@ -6,14 +6,14 @@ import { AccountLayout } from "@solana/spl-token";
 
 
 // Méthode pour obtenir le solde d'un token
-export async function getTokenBalance(connection: Connection, wallet: Keypair, tokenAddress: string): Promise<bigint> {
+export async function getTokenBalance(connection: Connection, wallet: Keypair, tokenAddress: string, minContextSlot?: number): Promise<bigint> {
     try {
         // Créer l'adresse du compte de token associé
         const tokenMint = new PublicKey(tokenAddress);
         const associatedTokenAddress = await getAssociatedTokenAddress(tokenMint, wallet.publicKey);
 
         // Vérifier si le compte existe
-        const tokenAccountInfo = await connection.getAccountInfo(associatedTokenAddress);
+        const tokenAccountInfo = await connection.getAccountInfo(associatedTokenAddress, { minContextSlot });
 
         if (!tokenAccountInfo) {
             return 0n; // Le compte n'existe pas, donc le solde est 0

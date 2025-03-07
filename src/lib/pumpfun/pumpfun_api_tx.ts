@@ -7,21 +7,27 @@ import { TransactionResult } from '../../services/Trading.service';
 
 
 export async function sendPortalBuyTransaction(connection: Connection, wallet: Keypair, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.00001) {
+
+    const tradeData = {
+        "publicKey": wallet.publicKey,  // Your wallet public key
+        "action": "buy",                 // "buy" or "sell"
+        "mint": tokenAddress,         // contract address of the token you want to trade
+        "denominatedInSol": "true",     // "true" if amount is amount of SOL, "false" if amount is number of tokens
+        "amount": solAmount,                  // amount of SOL or tokens
+        "slippage": slippage,                  // percent slippage allowed
+        "priorityFee": priorityFee,          // priority fee
+        "pool": "pump",                   // exchange to trade on. "pump", "raydium" or "auto"
+    };
+
+    console.log('tradeData:', tradeData)
+
+
     const response = await fetch(`https://pumpportal.fun/api/trade-local`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-            "publicKey": wallet.publicKey,  // Your wallet public key
-            "action": "buy",                 // "buy" or "sell"
-            "mint": tokenAddress,         // contract address of the token you want to trade
-            "denominatedInSol": "true",     // "true" if amount is amount of SOL, "false" if amount is number of tokens
-            "amount": solAmount,                  // amount of SOL or tokens
-            "slippage": slippage,                  // percent slippage allowed
-            "priorityFee": priorityFee,          // priority fee
-            "pool": "pump",                   // exchange to trade on. "pump", "raydium" or "auto"
-        })
+        body: JSON.stringify(tradeData)
     });
 
     if (response.status === 200) { // successfully generated transaction

@@ -1,6 +1,7 @@
 // pumpfun_tx.ts
 
-import { ParsedTransactionWithMeta } from "@solana/web3.js";
+import { Connection, ParsedTransactionWithMeta } from "@solana/web3.js";
+import { retryAsync } from "../utils/promise.util";
 
 /* ######################################################### */
 
@@ -119,5 +120,31 @@ export function decodeTransaction(tx: ParsedTransactionWithMeta | null): {
     }
 }
 
+
+
+
+export const getParsedTransaction = async (connection: Connection, signature: string) => {
+    const parsedTransaction = await retryAsync(
+        async () => {
+            const tx = await connection.getParsedTransaction(
+                signature,
+                { maxSupportedTransactionVersion: 0, commitment: "confirmed" }
+            );
+
+            if (!tx) {
+                throw new Error('Transaction non trouvée');
+            }
+
+            return tx;
+        },
+        1_000,  // Réessayer toutes les 1 secondes
+        30_000, // Timeout après 30 secondes
+        (attempt, elapsed) => {
+            console.log(`Tentative ${attempt} d'obtenir la transaction (${elapsed}ms écoulées)...`);
+        }
+    );
+
+    return parsedTransaction;
+};
 
 

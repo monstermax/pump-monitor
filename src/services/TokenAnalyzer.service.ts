@@ -61,7 +61,7 @@ export class TokenAnalyzer extends ServiceAbstract {
     /** Déclenche la création de l'analyse d'un token après le mint */
     private async handleNewToken(token: Token) {
         //console.log('DEBUG TokenTokenAnalyzerManager: handleNewToken', token);
-        this.log(`Analyse token ${token.address} après mint`);
+        //this.log(`Analyse token ${token.address} après mint`);
 
         // Création de l'analyse
         const analysis = this.createTokenAnalysisAfterMint(token);
@@ -86,7 +86,7 @@ export class TokenAnalyzer extends ServiceAbstract {
     /** Déclenche la mise à jour de l'analyse d'un token après un trade (buy/sell) */
     private async handleNewTrade(trade: Trade) {
         //console.log('DEBUG TokenAnalyzer: handleTrade', trade);
-        this.log(`Analyse token ${trade.tokenAddress} après ${trade.type} ${trade.solAmount.toFixed(3)} SOL`);
+        //this.log(`Analyse token ${trade.tokenAddress} après ${trade.type} ${trade.solAmount.toFixed(3)} SOL`);
 
         // Chargement du token
         const token = this.db.getTokenByAddress(trade.tokenAddress);

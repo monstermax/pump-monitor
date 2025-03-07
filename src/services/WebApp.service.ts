@@ -73,6 +73,7 @@ export class WebApp extends ServiceAbstract {
         this.tokenManager.on('new_trade_added', this.handleNewTrade.bind(this))
         this.tokenAnalyzer.on('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
         this.tokenAnalyzer.on('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
+        this.portfolio.on('portfolio_refreshed', this.handlePortfolioUpdated.bind(this))
 
 
         super.started();
@@ -99,6 +100,7 @@ export class WebApp extends ServiceAbstract {
         this.tokenManager.off('new_trade_added', this.handleNewTrade.bind(this))
         this.tokenAnalyzer.off('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
         this.tokenAnalyzer.off('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
+        this.portfolio.on('portfolio_refreshed', this.handlePortfolioUpdated.bind(this))
 
 
         super.stopped();
@@ -252,7 +254,7 @@ export class WebApp extends ServiceAbstract {
                 if (result.success) {
                     this.log(`Bought ${result.tokenAmount} ${token.symbol} for ${result.solAmount} SOL`);
 
-                    this.emitPortfolioUpdate({ type: 'buy', tokenAddress: token.address, tokenAmount: result.tokenAmount, solAmount: result.solAmount })
+                    //this.emitPortfolioUpdate({ type: 'buy', tokenAddress: token.address, tokenAmount: result.tokenAmount, solAmount: result.solAmount })
 
                     socket.emit('trade_result', { success: true, message: `Bought ${result.tokenAmount} ${token.symbol}` } as TradeResult);
 
@@ -287,7 +289,7 @@ export class WebApp extends ServiceAbstract {
                 if (result.success) {
                     this.log(`Sold ${result.tokenAmount} ${token.symbol} for ${result.solAmount} SOL`);
 
-                    this.emitPortfolioUpdate({ type: 'sell', tokenAddress: token.address, tokenAmount: result.tokenAmount, solAmount: result.solAmount })
+                    //this.emitPortfolioUpdate({ type: 'sell', tokenAddress: token.address, tokenAmount: result.tokenAmount, solAmount: result.solAmount })
 
                     socket.emit('trade_result', { success: true, message: `Sold ${result.tokenAmount} ${token.symbol}` });
 
@@ -388,6 +390,11 @@ export class WebApp extends ServiceAbstract {
     }
 
 
+    handlePortfolioUpdated() {
+        this.emitPortfolioUpdated()
+    }
+
+
 
     // Emission d'evenements à destination de la WebApp
 
@@ -395,6 +402,13 @@ export class WebApp extends ServiceAbstract {
         if (!this.io) return;
         const serverStats = this.getServerStats();
         this.io.emit('server_stats', serverStats);
+    }
+
+
+    emitPortfolioUpdated() {
+        if (!this.io) return;
+        const portfolio = this.portfolio.getPortfolio();
+        this.io.emit('portfolio_data', portfolio);
     }
 
 
@@ -441,10 +455,10 @@ export class WebApp extends ServiceAbstract {
     }
 
 
-    emitPortfolioUpdate(portfolioUpdate: { type: 'buy' | 'sell', tokenAddress: string, tokenAmount: number, solAmount: number }) {
-        if (!this.io) return;
-        this.io.emit('portfolio_update', portfolioUpdate);
-    }
+    //emitPortfolioUpdate(portfolioUpdate: { type: 'buy' | 'sell', tokenAddress: string, tokenAmount: number, solAmount: number }) {
+    //    if (!this.io) return;
+    //    this.io.emit('portfolio_update', portfolioUpdate);
+    //}
 
 
     emitWalletUpdate(balanceSOL: number) {

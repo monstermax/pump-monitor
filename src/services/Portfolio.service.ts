@@ -1,6 +1,6 @@
 // Portfolio.service.ts
 
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 
 import { ServiceAbstract } from "./abstract.service";
 import { Token, TokenHolder, Trade } from "../models/Token.model";
@@ -27,6 +27,18 @@ const ignoredHoldings: string[] = [
     'GxaHqU3QN1j4pQGLKT9FjYSzE9FTaih5SLrBVjQwpump', // GWEASE
 ];
 
+
+const portfolioRpcs = [
+    appConfig.solana.rpc.chainstack,
+    appConfig.solana.rpc.helius,
+    appConfig.solana.rpc.drpc,
+    appConfig.solana.rpc.getblock,
+    appConfig.solana.rpc.alchemy,
+    appConfig.solana.rpc.syndica,
+    appConfig.solana.rpc.lavanet,
+];
+
+
 /* ######################################################### */
 
 
@@ -35,7 +47,8 @@ export class PortfolioManager extends ServiceAbstract {
     private balanceSOL: number | null = null;
     private portfolioSettings: PortfolioSettings | null = null;
     private portfolioStats: PortfolioStats | null = null;
-    private magicConnection: MagicConnection = new MagicConnection({ rpcs: Array.from(new Set(Object.values(appConfig.solana.rpc))) });
+    //private connection: Connection = new MagicConnection({ rpcs: portfolioRpcs });
+    private connection: Connection = new Connection(appConfig.solana.rpc.lavanet, { commitment: 'confirmed' });
 
 
     start() {
@@ -194,7 +207,7 @@ export class PortfolioManager extends ServiceAbstract {
 
         if (this.wallet) {
             try {
-                const newBalanceLamports = await this.magicConnection.getBalance(this.wallet.publicKey)
+                const newBalanceLamports = await this.connection.getBalance(this.wallet.publicKey)
                 balanceLamports = newBalanceLamports;
 
             } catch (err: any) {
@@ -224,7 +237,7 @@ export class PortfolioManager extends ServiceAbstract {
             this.log('Fetching tokens from blockchain...');
 
             // Récupérer les SPL tokens du wallet
-            const response = await this.magicConnection.getParsedTokenAccountsByOwner(
+            const response = await this.connection.getParsedTokenAccountsByOwner(
                 this.wallet.publicKey,
                 { programId: new PublicKey(appConfig.pumpfun.PUMP_TOKEN) } // Token Program ID
             );
@@ -243,8 +256,10 @@ export class PortfolioManager extends ServiceAbstract {
                 const existingHolding = this.db.getTokenHolding(mintAddress);
 
                 // Ignorer les tokens avec solde 0
-                if (amount <= 0.000001 && this.db.getTokenHolding(mintAddress)) {
-                    this.db.deleteTokenHolding(mintAddress);
+                if (amount <= 0.000001) {
+                    if (existingHolding) {
+                        this.db.deleteTokenHolding(mintAddress);
+                    }
                     continue;
                 }
 
@@ -358,7 +373,7 @@ export class PortfolioManager extends ServiceAbstract {
                 transactions: [] // Pas de transactions connues
             };
 
-            this.db.setTokenHolding(newHolding);
+            this.db.addTokenHolding(newHolding);
         }
     }
 
@@ -544,7 +559,7 @@ export class PortfolioManager extends ServiceAbstract {
     async updateHoldingBalance(tokenAddress: string, action: 'buy' | 'sell' | 'update holding' = 'update holding') {
         if (!this.wallet) return;
 
-        const balance: bigint = await getTokenBalance(this.magicConnection, this.wallet, tokenAddress);
+        const balance: bigint = await getTokenBalance(this.connection, this.wallet, tokenAddress, this.trading.getLastTradeSlot());
         const tokenBalance = Number(balance) / 1e6;
 
         const newHolding = this.db.getTokenHolding(tokenAddress);
@@ -785,8 +800,8 @@ export class PortfolioManager extends ServiceAbstract {
         }
 
 
-        this.decreaseBalanceSOL(solAmount);
-        this.emit('wallet_update', this.getBalanceSOL());
+        //this.decreaseBalanceSOL(solAmount);
+        //this.emit('wallet_update', this.getBalanceSOL());
 
         // Mettre à jour les statistiques du portefeuille
         this.updateStats();
@@ -855,8 +870,8 @@ export class PortfolioManager extends ServiceAbstract {
         }
 
 
-        this.increaseBalanceSOL(solAmount);
-        this.emit('wallet_update', this.getBalanceSOL());
+        //this.increaseBalanceSOL(solAmount);
+        //this.emit('wallet_update', this.getBalanceSOL());
 
         // Mettre à jour les statistiques du portefeuille
         this.updateStats();

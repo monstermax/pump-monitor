@@ -86,19 +86,19 @@ export class OpportunityAnalyzer {
         const holdersScore = this.analyzeHolders(token.holders);
 
         // Scores pour lesquels on a peu de données initiales
-        const initialVolumeScore = token.trades.length < 3 ? 80 : (token.trades.length < 5 ? 60 : 20);
-        const growthPotentialScore = token.holders.length < 2 ? 80 : (token.holders.length < 4 ? 50 : 20);
-        const ageScore = tokenAge < 3 ? 80 : (tokenAge < 5 ? 60 : (tokenAge < 10 ? 40 : 20));
+        const initialVolumeScore = token.trades.length < 3 ? 70 : (token.trades.length < 5 ? 40 : 10);
+        const growthPotentialScore = token.holders.length < 2 ? 70 : (token.holders.length < 4 ? 50 : 20);
+        const ageScore = tokenAge < 3 ? 80 : (tokenAge < 5 ? 60 : (tokenAge < 10 ? 30 : 0));
 
         // Calculer le score global avec pondérations
         const weightedScore = (
             nameScore * 0.15 +
             symbolScore * 0.10 +
             socialScore * 0.20 +
-            initialVolumeScore * 0.25 +
-            growthPotentialScore * 0.15 +
+            initialVolumeScore * 0.10 +
+            growthPotentialScore * 0.10 +
             holdersScore * 0.10 +
-            ageScore * 0.25 +
+            ageScore * 0.20 +
             creatorScore * 0.05
         );
 

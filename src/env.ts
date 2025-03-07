@@ -8,7 +8,7 @@ config({ path: `${__dirname}/../.env` });
 
 
 const RpcList = {
-    'default': process.env.RPC_HELIUS ?? '',
+    'solana': process.env.RPC_SOLANA ?? '',
     'helius': process.env.RPC_HELIUS ?? '',
     'heliusJpp': process.env.RPC_HELIUSJPP ?? '',
     'quicknode': process.env.RPC_QUICKNODE ?? '',
@@ -17,8 +17,14 @@ const RpcList = {
     'getblock': process.env.RPC_GETBLOCK ?? '',
     //'tatum': process.env.RPC_TATUM ?? '',
     //'ankr': process.env.RPC_ANKR ?? '',
+    //'pokt': process.env.RPC_POKT ?? '',
     'chainstack': process.env.RPC_CHAINSTACK ?? '',
     'shyft': process.env.RPC_SHYFT ?? '',
+    'nownodes': process.env.RPC_NOWNODES ?? '',
+    'rockx': process.env.RPC_ROCKX ?? '',
+    'syndica': process.env.RPC_SYNDICA ?? '',
+    'lavanet': process.env.RPC_LAVANET ?? '',
+    'omnia': process.env.RPC_OMNIA ?? '',
 };
 
 
@@ -68,7 +74,7 @@ export const appConfig: AppConfig = {
     },
     trading: {
         autoTrading: false,
-        minSolInWallet: 0.15,
+        minSolInWallet: 0.10,
         maxConcurrentInvestments: 1,
         maxSolPerToken: 0.1,
         totalPortfolioLimit: 1.0,
