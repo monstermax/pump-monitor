@@ -159,7 +159,7 @@ export class Database extends ServiceAbstract {
     }
 
 
-    updateTokenHolding(tokenAddress: string, holdingUpdate?: Partial<Token>) {
+    updateTokenHolding(tokenAddress: string, holdingUpdate?: Partial<PortfolioHolding>) {
         const holding: PortfolioHolding | undefined = this.inMemoryData.tokensHoldings.get(tokenAddress);
 
         if (! holding) {
@@ -187,7 +187,21 @@ export class Database extends ServiceAbstract {
         this.inMemoryData.tokensHoldings.delete(tokenAddress);
         this.emit('token_holdings_updated', null, tokenAddress);
 
-        // TODO: delete in MongoDB
+        return true;
+    }
+
+
+    closeTokenHoldingPosition(tokenAddress: string) {
+        if (! this.inMemoryData.tokensHoldings.has(tokenAddress)) {
+            this.warn(`Holding du token non trouvée pour suppression`);
+            return false;
+        }
+
+
+        this.updateTokenHolding(tokenAddress, { closed: true });
+
+        //this.inMemoryData.tokensHoldings.delete(tokenAddress);
+        //this.emit('token_holdings_updated', null, tokenAddress);
 
         return true;
     }
@@ -297,13 +311,35 @@ export class Database extends ServiceAbstract {
 
         // Charger les tokens
         const tokensCollection = this.mongoDb.collection<Token>('tokens');
-        const tokenDocs = await tokensCollection.find({}).toArray();
+        const tokensDocs = await tokensCollection.find({}).toArray();
 
-        tokenDocs.forEach(tokenDoc => {
+        tokensDocs.forEach(tokenDoc => {
             const token: Token = convertFromMongo(tokenDoc);
             this.inMemoryData.tokens.set(token.address, token);
         });
 
+
+
+        // charges les analyses
+        const tokensAnalysisCollection = this.mongoDb.collection<TokenAnalysis>('tokens_analysis');
+        const tokensAnalysisDocs = await tokensAnalysisCollection.find({}).toArray();
+
+        tokensAnalysisDocs.forEach(analysisDoc => {
+            const analysis: TokenAnalysis = convertFromMongo(analysisDoc);
+            this.inMemoryData.tokensAnalysis.set(analysis.tokenAddress, analysis);
+        });
+
+
+        // charges les holdings
+        const tokensHoldingsCollection = this.mongoDb.collection<PortfolioHolding>('tokens_holdings');
+        const tokensHoldingsDocs = await tokensHoldingsCollection.find({}).toArray();
+
+        tokensHoldingsDocs.forEach(holdingDoc => {
+            const holding: PortfolioHolding = convertFromMongo(holdingDoc);
+            if (holding.amount > 0.000_001) {
+                this.inMemoryData.tokensHoldings.set(holding.tokenAddress, holding);
+            }
+        });
     }
 
 
@@ -337,8 +373,20 @@ export class Database extends ServiceAbstract {
         await this.connectToMongo();
         if (!this.mongoDb) return;
 
-        await this.mongoDb.collection('tokens_analysis').deleteMany({});
-        await this.mongoDb.collection('tokens').deleteMany({});
+        if (0) {
+            const tokensHoldingsCollection = this.mongoDb.collection<PortfolioHolding>('tokens_holdings');
+            const tokensHoldingsDocs = await tokensHoldingsCollection.find({}).toArray();
+            const holdingsAddresses = tokensHoldingsDocs.map(holding => holding.tokenAddress);
+
+            await this.mongoDb.collection('tokens').deleteMany({ address: { $nin: holdingsAddresses } });
+            await this.mongoDb.collection('tokens_analysis').deleteMany({ tokenAddress: { $nin: holdingsAddresses } });
+
+        } else {
+            await this.mongoDb.collection('tokens').deleteMany({});
+            await this.mongoDb.collection('tokens_analysis').deleteMany({});
+            await this.mongoDb.collection('tokens_holdings').deleteMany({});
+
+        }
 
         this.log('Database cleared');
     }

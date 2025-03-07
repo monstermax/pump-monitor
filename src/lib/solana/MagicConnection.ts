@@ -169,9 +169,12 @@ export async function MagicConnectionMethod<T>(
                 errors.set(rpcUrl, errorMessage);
                 //console.error(`[RPC ${rpcUrl}] Erreur (tentative ${attempt}/${maxRetries}): ${errorMessage}`);
 
+                if (!maxRetries) throw error;
+
                 // Attendre avant de réessayer
                 if (attempt < maxRetries) {
-                    await sleep(1000);
+                    //await sleep(1000);
+                    await sleep(timeout / maxRetries);
                 }
             }
         }

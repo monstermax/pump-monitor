@@ -25,17 +25,26 @@ export type SellRecommandation = {
 const ignoredHoldings: string[] = [
     'DuNape6nkjxVtfBDkZBdUqhWTvUSvJ2pwKczaGNBpump', // ISCG
     'GxaHqU3QN1j4pQGLKT9FjYSzE9FTaih5SLrBVjQwpump', // GWEASE
+    'BQwYE9jDG8MmLNrTY82J8Lq63YGR6namdpBERckEpump', // McTrump
+    '9rvodi8iwywa8PBQEoWBkyiMooRmE8k35MgMETiLpump', // SS
+    '8hgBvGP4mnrHWjxXxqBjJ4yX6JgJGweafBqamvEbpump', // DICK9
 ];
 
 
 const portfolioRpcs = [
-    appConfig.solana.rpc.chainstack,
+    //appConfig.solana.rpc.chainstack,
+    //appConfig.solana.rpc.drpc,
     appConfig.solana.rpc.helius,
-    appConfig.solana.rpc.drpc,
     appConfig.solana.rpc.getblock,
     appConfig.solana.rpc.alchemy,
     appConfig.solana.rpc.syndica,
     appConfig.solana.rpc.lavanet,
+    appConfig.solana.rpc.heliusJpp,
+    appConfig.solana.rpc.quicknode,
+    appConfig.solana.rpc.shyft,
+    appConfig.solana.rpc.nownodes,
+    appConfig.solana.rpc.rockx,
+    appConfig.solana.rpc.omnia,
 ];
 
 
@@ -47,8 +56,8 @@ export class PortfolioManager extends ServiceAbstract {
     private balanceSOL: number | null = null;
     private portfolioSettings: PortfolioSettings | null = null;
     private portfolioStats: PortfolioStats | null = null;
-    //private connection: Connection = new MagicConnection({ rpcs: portfolioRpcs });
-    private connection: Connection = new Connection(appConfig.solana.rpc.lavanet, { commitment: 'confirmed' });
+    private connection: Connection = new MagicConnection({ rpcs: portfolioRpcs, maxRpcs: 3, maxRetries: 15 });
+    //private connection: Connection = new Connection(appConfig.solana.rpc.lavanet, { commitment: 'confirmed' });
 
 
     start() {
@@ -207,7 +216,7 @@ export class PortfolioManager extends ServiceAbstract {
 
         if (this.wallet) {
             try {
-                const newBalanceLamports = await this.connection.getBalance(this.wallet.publicKey)
+                const newBalanceLamports = await this.connection.getBalance(this.wallet.publicKey, { minContextSlot: this.trading.getLastTradeSlot() })
                 balanceLamports = newBalanceLamports;
 
             } catch (err: any) {
@@ -256,14 +265,14 @@ export class PortfolioManager extends ServiceAbstract {
                 const existingHolding = this.db.getTokenHolding(mintAddress);
 
                 // Ignorer les tokens avec solde 0
-                if (amount <= 0.000001) {
-                    if (existingHolding) {
-                        this.db.deleteTokenHolding(mintAddress);
-                    }
-                    continue;
-                }
+                //if (amount <= 0.000001) {
+                //    if (existingHolding && ! existingHolding.closed) {
+                //        this.db.closeTokenHoldingPosition(mintAddress);
+                //    }
+                //    //continue;
+                //}
 
-                this.log(`Token: ${mintAddress}, Balance: ${amount}`);
+                //this.log(`Token: ${mintAddress}, Balance: ${amount}`);
 
 
                 if (!existingHolding) {
@@ -294,7 +303,7 @@ export class PortfolioManager extends ServiceAbstract {
                         this.error(`Error processing token ${mintAddress}: ${err.message}`);
                     }
 
-                } else if (Math.abs(existingHolding.amount - amount) > 0.000001) {
+                } else if (Math.abs(existingHolding.amount - amount) > 0.000_001) {
                     // Si le solde a changé, mettre à jour notre tracking
                     const token = this.db.getTokenByAddress(mintAddress);
 
@@ -324,34 +333,30 @@ export class PortfolioManager extends ServiceAbstract {
         const existingHolding = this.db.getTokenHolding(token.address);
 
         if (existingHolding) {
-            if (Math.abs(existingHolding.amount - onchainAmount) > 0.000001) {
-                this.log(`Updating token ${token.symbol} balance: ${existingHolding.amount} -> ${onchainAmount}`);
+            this.log(`Updating token ${token.symbol} balance: ${existingHolding.amount} -> ${onchainAmount}`);
 
-                // Calculer les nouvelles valeurs
-                const newCurrentValue = onchainAmount * Number(token.price);
-                const profitLoss = newCurrentValue - existingHolding.totalInvestment;
-                const profitLossPercent = existingHolding.totalInvestment > 0
-                    ? (profitLoss / existingHolding.totalInvestment) * 100
-                    : 0;
+            // Calculer les nouvelles valeurs
+            const newCurrentValue = onchainAmount * Number(token.price);
+            const profitLoss = newCurrentValue - existingHolding.totalInvestment;
+            const profitLossPercent = existingHolding.totalInvestment > 0
+                ? (profitLoss / existingHolding.totalInvestment) * 100
+                : 0;
 
-                // Créer un holding mis à jour
-                const updatedHolding: PortfolioHolding = {
-                    ...existingHolding,
-                    amount: onchainAmount,
-                    currentValue: newCurrentValue,
-                    profitLoss,
-                    profitLossPercent,
-                    lastUpdated: new Date()
-                };
+            // Créer un holding mis à jour
+            const updatedHolding: PortfolioHolding = {
+                ...existingHolding,
+                amount: onchainAmount,
+                currentValue: newCurrentValue,
+                profitLoss,
+                profitLossPercent,
+                lastUpdated: new Date(),
+                closed: existingHolding.closed || newCurrentValue < 0.0001,
+            };
 
-                // Sauvegarder les modifications
-                this.db.setTokenHolding(updatedHolding);
+            // Sauvegarder les modifications
+            this.db.setTokenHolding(updatedHolding);
 
-            } else {
-                this.db.deleteTokenHolding(token.address);
-            }
-
-        } else if (onchainAmount > 0) {
+        } else if (onchainAmount > 0.000_001) {
             // Créer un nouveau holding pour ce token
             this.log(`Adding new token to portfolio: ${token.symbol} (${onchainAmount})`);
 
@@ -370,7 +375,8 @@ export class PortfolioManager extends ServiceAbstract {
                 profitLoss: 0, // Pas de P/L car on estime que c'est l'achat initial
                 profitLossPercent: 0,
                 lastUpdated: new Date(),
-                transactions: [] // Pas de transactions connues
+                transactions: [], // Pas de transactions connues
+                closed: false,
             };
 
             this.db.addTokenHolding(newHolding);
@@ -402,7 +408,8 @@ export class PortfolioManager extends ServiceAbstract {
             const marketCapSOL = pumpData.market_cap || 0;
             const marketCapUSD = pumpData.usd_market_cap || 0;
 
-            let curveBalance = totalSupply - ourBalance;
+            const curveBalance = totalSupply - ourBalance;
+            const curvePercentage = 100 * curveBalance / totalSupply;
 
 
             // Créer l'objet Token à partir des données de l'API
@@ -425,7 +432,13 @@ export class PortfolioManager extends ServiceAbstract {
                 holders: [],
                 analyticsSummary: null,
                 lastUpdated: new Date(),
-                boundingCurve: { address: pumpData.bonding_curve, percentage: 100, solAmount: 0, tokenAmount: totalSupply },
+                boundingCurve: {
+                    address: pumpData.bonding_curve,
+                    percentage: curvePercentage,
+                    solAmount: 0,
+                    tokenAmount: curveBalance,
+                    completed: pumpData.complete,
+                },
                 milestones: [],
                 trends: {},
                 kpis: {
@@ -441,22 +454,6 @@ export class PortfolioManager extends ServiceAbstract {
             };
 
 
-            // Ajouter la bonding curve en holder
-            if (pumpData.bonding_curve) {
-                const bondingCurveHolder: TokenHolder = {
-                    address: pumpData.bonding_curve,
-                    percentage: 100 * curveBalance / totalSupply,
-                    tokenBalance: curveBalance,
-                    type: 'bondingCurve' as const,
-                    lastUpdate: new Date,
-                    firstBuy: new Date,
-                    tradesCount: 0,
-                    tokenBlanceMax: curveBalance,
-                };
-                newToken.holders.push(bondingCurveHolder);
-            }
-
-
             // Ajouter notre holding
             if (ourBalance && this.wallet) {
                 const meHolder: TokenHolder = {
@@ -466,8 +463,8 @@ export class PortfolioManager extends ServiceAbstract {
                     type: pumpData.creator === this.wallet.publicKey.toBase58() ? 'dev' : 'trader',
                     lastUpdate: new Date,
                     firstBuy: new Date,
-                    tokenBlanceMax: ourBalance,
-                    tradesCount: 0,
+                    tokenBalanceMax: ourBalance,
+                    tradesCount: 1,
                 };
                 newToken.holders.push(meHolder);
             }
@@ -590,13 +587,13 @@ export class PortfolioManager extends ServiceAbstract {
             const token = this.db.getTokenByAddress(holding.tokenAddress);
             if (! token) throw new Error(`Token à vendre non trouvé`);
 
-            const minPrice = token.kpis.priceMax;
-            const maxPrice = token.kpis.priceMin;
+            const minPrice = token.kpis.priceMin;
+            const maxPrice = token.kpis.priceMax;
             const priceOffset = Number(maxPrice) - Number(minPrice);
             const currentPrice = token.price;
             const percentOfAth = 100 * (Number(currentPrice) - Number(minPrice)) / priceOffset;
 
-            if (holding.amount * Number(currentPrice) < 0.001) {
+            if (holding.amount * Number(currentPrice) < 0.001 || holding.amount <= 0.000_001) {
                 sellRecommendations.push({
                     tokenAddress: holding.tokenAddress,
                     tokenSymbol: holding.tokenSymbol,
@@ -688,7 +685,7 @@ export class PortfolioManager extends ServiceAbstract {
         }
 
         // Montant à investir
-        const amountToInvest = solAmount || settings.defaultBuyAmount;
+        let amountToInvest = solAmount || settings.defaultBuyAmount;
 
         // Vérifier si l'achat automatique est activé
         if (!settings.autoBuyEnabled || !solAmount) {
@@ -702,13 +699,21 @@ export class PortfolioManager extends ServiceAbstract {
         }
 
         // Vérifier le nombre maximum d'investissements simultanés
-        if (holdings.length + this.trading.getPendingBuys() >= settings.maxConcurrentInvestments) {
+        const activeHoldings = holdings.filter(holding => ! holding.closed && holding.amount >= 0.000_001);
+
+        if (activeHoldings.length + this.trading.getPendingBuys() >= settings.maxConcurrentInvestments) {
             return { canBuy: false, reason: 'Maximum concurrent investments reached' };
         }
 
         const availableAmount = this.getBalanceSOL() - appConfig.trading.minSolInWallet;
         if (amountToInvest > availableAmount) {
-            return { canBuy: false, reason: 'Wallet almost empty' };
+            if (availableAmount >= 0.01) {
+                amountToInvest = availableAmount;
+
+            } else {
+                return { canBuy: false, reason: 'SOL balance too few' };
+            }
+
         }
 
         // Vérifier la limite totale du portefeuille
@@ -793,7 +798,8 @@ export class PortfolioManager extends ServiceAbstract {
                 profitLoss: (tokenAmount * Number(token.price)) - solAmount,
                 profitLossPercent: (((tokenAmount * Number(token.price)) - solAmount) / solAmount) * 100,
                 lastUpdated: new Date(),
-                transactions: [transaction]
+                transactions: [transaction],
+                closed: false,
             };
 
             this.db.addTokenHolding(newHolding);
@@ -863,10 +869,10 @@ export class PortfolioManager extends ServiceAbstract {
             this.addTransaction(token.address, transaction);
 
             // Puis supprimer le holding
-            this.db.deleteTokenHolding(token.address);
+            this.db.closeTokenHoldingPosition(token.address);
 
         } else {
-            this.updateHoldingPerformance(holding, tokenAmount, solAmount, token.price);
+            this.updateHoldingPerformance(holding, -tokenAmount, -solAmount, token.price);
         }
 
 

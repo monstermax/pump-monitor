@@ -1,7 +1,7 @@
 // opportunity-analyzer.ts
 
 import { appConfig } from '../env';
-import { Token } from '../models/Token.model';
+import { Token, Trade } from '../models/Token.model';
 
 
 /* ######################################################### */
@@ -74,7 +74,7 @@ export class OpportunityAnalyzer {
 
 
     /** Analyse un nouveau token pour déterminer s'il représente une opportunité d'achat */
-    public analyzeInitialOpportunity(token: Token): OpportunityAnalysis {
+    public analyzeInitialOpportunity(token: Token, devTrade?: Trade): OpportunityAnalysis {
 
         const tokenAge = Date.now() - token.createdAt.getTime()
 
@@ -85,25 +85,55 @@ export class OpportunityAnalyzer {
         const creatorScore = this.analyzeCreator(token.creator);
         const holdersScore = this.analyzeHolders(token.holders);
 
+        //const devTrade = token.trades.find(trade => trade.traderAddress === token.creator && trade.type === 'buy');
+        const devBuy = devTrade?.solAmount ?? 0;
+        const devBuyAmount = devTrade?.tokenAmount ?? 0;
+        const devPercentage = 100 * devBuyAmount / token.totalSupply;
+
         // Scores pour lesquels on a peu de données initiales
-        const initialVolumeScore = token.trades.length < 3 ? 70 : (token.trades.length < 5 ? 40 : 10);
-        const growthPotentialScore = token.holders.length < 2 ? 70 : (token.holders.length < 4 ? 50 : 20);
-        const ageScore = tokenAge < 3 ? 80 : (tokenAge < 5 ? 60 : (tokenAge < 10 ? 30 : 0));
+        const initialVolumeScore = devBuy <= 0.1
+            ? 80
+            : devBuy <= 0.5
+                ? 60
+                : devBuy <= 1
+                    ? 40
+                    : 20;
+
+        const growthPotentialScore = devPercentage <= 1
+            ? 80
+            : devPercentage <= 2
+                ? 60
+                : devPercentage <= 5
+                    ? 40
+                    : 20;
+
+        const ageScore = tokenAge <= 1
+            ? 80
+            : tokenAge <= 2
+                ? 70
+                : tokenAge <= 3
+                    ? 60
+                    : tokenAge <= 5
+                        ? 50
+                        : tokenAge <= 10
+                            ? 40
+                            : 20;
 
         // Calculer le score global avec pondérations
         const weightedScore = (
-            nameScore * 0.15 +
-            symbolScore * 0.10 +
-            socialScore * 0.20 +
-            initialVolumeScore * 0.10 +
-            growthPotentialScore * 0.10 +
-            holdersScore * 0.10 +
-            ageScore * 0.20 +
+            nameScore * 0.05 +
+            symbolScore * 0.05 +
+            socialScore * 0.10 +
+            initialVolumeScore * 0.20 +
+            growthPotentialScore * 0.20 +
+            holdersScore * 0.05 +
+            ageScore * 0.30 +
             creatorScore * 0.05
         );
 
         // Arrondir le score
         const finalScore = Math.round(weightedScore);
+        console.log('AGE DU TOKEN:', tokenAge, token.address, `(finalScore: ${finalScore} | devBuy: ${devBuy.toFixed(3)} SOL = ${devPercentage.toFixed(2)} %)`)
 
         // Déterminer le niveau de confiance
         const confidence = this.calculateConfidence(finalScore, token);
@@ -223,14 +253,14 @@ export class OpportunityAnalyzer {
         }
 
         // Vérifier si le symbole contient un mot-clé tendance
-        for (const trend of this.trendingKeywords) {
-            for (const keyword of trend.keywords) {
-                if (normalizedSymbol.includes(keyword)) {
-                    score += 15;
-                    break;
-                }
-            }
-        }
+        //for (const trend of this.trendingKeywords) {
+        //    for (const keyword of trend.keywords) {
+        //        if (normalizedSymbol.includes(keyword)) {
+        //            score += 15;
+        //            break;
+        //        }
+        //    }
+        //}
 
         // Vérifier si le symbole est en majuscules (convention)
         if (symbol === symbol.toUpperCase()) {

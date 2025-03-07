@@ -74,6 +74,7 @@ export class WebApp extends ServiceAbstract {
         this.tokenAnalyzer.on('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
         this.tokenAnalyzer.on('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
         this.portfolio.on('portfolio_refreshed', this.handlePortfolioUpdated.bind(this))
+        this.portfolio.on('wallet_update', this.handlePortfolioWalletUpdated.bind(this))
 
 
         super.started();
@@ -100,7 +101,8 @@ export class WebApp extends ServiceAbstract {
         this.tokenManager.off('new_trade_added', this.handleNewTrade.bind(this))
         this.tokenAnalyzer.off('token_analysis_added', this.handleNewTokenAnalysis.bind(this))
         this.tokenAnalyzer.off('token_analysis_updated', this.handleTokenAnalysisUpdate.bind(this))
-        this.portfolio.on('portfolio_refreshed', this.handlePortfolioUpdated.bind(this))
+        this.portfolio.off('portfolio_refreshed', this.handlePortfolioUpdated.bind(this))
+        this.portfolio.off('wallet_update', this.handlePortfolioWalletUpdated.bind(this))
 
 
         super.stopped();
@@ -392,6 +394,11 @@ export class WebApp extends ServiceAbstract {
 
     handlePortfolioUpdated() {
         this.emitPortfolioUpdated()
+    }
+
+
+    handlePortfolioWalletUpdated(balanceSOL: number) {
+        this.emitWalletUpdate(balanceSOL)
     }
 
 

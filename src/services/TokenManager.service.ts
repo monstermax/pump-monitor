@@ -33,7 +33,7 @@ export class TokenManager extends ServiceAbstract {
 
 
 
-    private async handleNewToken(token: Token) {
+    private async handleNewToken(token: Token, devTrade?: Trade) {
         //console.log('DEBUG TokenManager: handleNewToken', token);
 
         // Enregistrement du token
@@ -45,7 +45,7 @@ export class TokenManager extends ServiceAbstract {
             this.fetchAndAssignTokenMetadata(token);
         }
 
-        this.emit('new_token_added', token);
+        this.emit('new_token_added', token, devTrade);
     }
 
 
@@ -161,7 +161,7 @@ export class TokenManager extends ServiceAbstract {
             if (holder) {
                 // Mettre à jour un holder existant
                 holder.tokenBalance += trade.tokenAmount;
-                holder.tokenBlanceMax = Math.max(holder.tokenBlanceMax, holder.tokenBalance);
+                holder.tokenBalanceMax = Math.max(holder.tokenBalanceMax, holder.tokenBalance);
                 holder.tradesCount++;
                 holder.lastUpdate = now;
             } else {
@@ -174,7 +174,7 @@ export class TokenManager extends ServiceAbstract {
                     tradesCount: 1,
                     firstBuy: now,
                     lastUpdate: now,
-                    tokenBlanceMax: trade.tokenAmount,
+                    tokenBalanceMax: trade.tokenAmount,
                 };
                 token.holders.push(newHolder);
                 holderIndex = token.holders.length - 1;

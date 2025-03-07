@@ -74,7 +74,7 @@ export const appConfig: AppConfig = {
     },
     trading: {
         autoTrading: false,
-        minSolInWallet: 0.10,
+        minSolInWallet: 0.05,
         maxConcurrentInvestments: 1,
         maxSolPerToken: 0.1,
         totalPortfolioLimit: 1.0,

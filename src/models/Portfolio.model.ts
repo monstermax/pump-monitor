@@ -25,6 +25,7 @@ export interface PortfolioHolding {
     profitLossPercent: number; // Profit/Perte (%)
     lastUpdated: Date;      // Dernière mise à jour
     transactions: PortfolioTransaction[]; // Transactions associées à ce holding
+    closed: boolean;
 }
 
 

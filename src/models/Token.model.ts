@@ -30,6 +30,7 @@ export interface Token {
         tokenAmount: number,
         solAmount: number,
         percentage: number, // pourcentage des tokens qui sont (encore) dans la bonding curve
+        completed: boolean,
     }
 
     trends: {
@@ -80,7 +81,7 @@ export interface TokenHolder {
     tradesCount: number;
     firstBuy: Date;
     lastUpdate: Date;
-    tokenBlanceMax: number;
+    tokenBalanceMax: number;
 }
 
 

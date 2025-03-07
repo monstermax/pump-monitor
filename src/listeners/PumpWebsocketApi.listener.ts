@@ -187,7 +187,7 @@ export class PumpWebsocketApi extends ServiceAbstract {
                     };
 
                     // Emet à evenement 'create' à destination de PumpMonitor
-                    this.emit('create', createMessage);
+                    //this.emit('create', createMessage);
 
                     if (message.initialBuy > 0) {
                         // Emet à evenement 'trade' à destination de PumpMonitor (pour le devBuy)
@@ -198,7 +198,11 @@ export class PumpWebsocketApi extends ServiceAbstract {
                             dataSource: 'PumpWebsocketApi'
                         };
 
-                        this.emit('trade', tradeMessage);
+                        //this.emit('trade', tradeMessage);
+                        this.emit('create', createMessage, tradeMessage);
+
+                    } else {
+                        this.emit('create', createMessage);
                     }
 
                     // Unsubscribe NewTokens events (TEST / DEBUG)

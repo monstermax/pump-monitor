@@ -77,7 +77,7 @@ export class SystemMonitor extends ServiceAbstract {
     getMetrics(): SystemMetrics | null {
         if (!this.metrics) return this.metrics;
 
-        this.emit('log', `Metrics sent ! Load avg: ${this.metrics.cpu.systemAverageLoad.load1} | Mem: ${this.metrics.memory.systemUsagePercent}%`);
+        //this.emit('log', `Metrics sent ! Load avg: ${this.metrics.cpu.systemAverageLoad.load1} | Mem: ${this.metrics.memory.systemUsagePercent}%`);
         return this.metrics;
     }
 
@@ -85,7 +85,7 @@ export class SystemMonitor extends ServiceAbstract {
     updateMetrics(): SystemMetrics | null {
         this.metrics = getSystemMetrics();
 
-        this.emit('log', `Updated metrics. Load avg: ${this.metrics.cpu.systemAverageLoad.load1} | Mem: ${this.metrics.memory.systemUsagePercent}%`);
+        //this.emit('log', `Updated metrics. Load avg: ${this.metrics.cpu.systemAverageLoad.load1} | Mem: ${this.metrics.memory.systemUsagePercent}%`);
         this.emit('metrics_updated');
 
         return this.metrics;

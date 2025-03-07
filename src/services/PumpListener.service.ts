@@ -1,7 +1,7 @@
 // PumpListener.service.ts
 
 import { ServiceManager } from "../managers/Service.manager";
-import { Token, Trade } from "../models/Token.model";
+import { Token, TokenHolder, Trade } from "../models/Token.model";
 import { ServiceAbstract } from "./abstract.service";
 import { PriceFeed } from "./PriceFeed.service";
 
@@ -90,8 +90,8 @@ export class PumpListener extends ServiceAbstract {
             if (!dataSourceInfos) {
                 // Ajout les dataSources non watchées
 
-                const onNewToken = (newTokenData: CreateTokenTxResult) => {
-                    this.handleNewToken(dataSource, newTokenData);
+                const onNewToken = (newTokenData: CreateTokenTxResult, tradeTokenData?: TokenTradeTxResult) => {
+                    this.handleNewToken(dataSource, newTokenData, tradeTokenData);
                 }
 
                 const onNewTrade = (tradeTokenData: TokenTradeTxResult) => {
@@ -134,14 +134,17 @@ export class PumpListener extends ServiceAbstract {
 
 
 
-    private async handleNewToken(dataSource: ServiceAbstract, newTokenData: CreateTokenTxResult) {
+    private async handleNewToken(dataSource: ServiceAbstract, newTokenData: CreateTokenTxResult, tradeTokenData?: TokenTradeTxResult) {
         //console.log('DEBUG PumpListener: handleNewToken', newTokenData)
 
         // TODO: dédoublonner/filtrer les requetes recues
 
-        const token: Token = this.createTokenFromTxResult(newTokenData);
+        const token: Token = this.createTokenFromTxResult(newTokenData, tradeTokenData);
+        this.emit('new_token_received', token, tradeTokenData);
 
-        this.emit('new_token_received', token);
+        if (tradeTokenData) {
+            this.handleNewTrade(dataSource, tradeTokenData);
+        }
     }
 
 
@@ -157,13 +160,33 @@ export class PumpListener extends ServiceAbstract {
 
 
     /** Formatte un Token recu par le DataSource, au format exploitable par TokenManager */
-    private createTokenFromTxResult(newTokenData: CreateTokenTxResult): Token {
+    private createTokenFromTxResult(newTokenData: CreateTokenTxResult, tradeTokenData?: TokenTradeTxResult): Token {
         const solPrice: number = this.priceFeed.getSolPrice();
 
         const price = (newTokenData.vSolInBondingCurve / newTokenData.vTokensInBondingCurve);
         const marketCapSOL = newTokenData.marketCapSol;
         const marketCapUSD = newTokenData.marketCapSol * solPrice;
         const totalSupply = newTokenData.totalSupply;
+
+        const devBuy = 0; //tradeTokenData?.solAmount ?? 0;
+        const devBuyAmount = tradeTokenData?.tokenAmount ?? 0;
+        const devPercentage = 100 * devBuyAmount / totalSupply;
+        const curvePercentage = 100 - devPercentage;
+        const curveAmount = totalSupply - devBuyAmount;
+
+        //const holders: TokenHolder[] = devBuy ? [
+        //    {
+        //        address: newTokenData.traderPublicKey,
+        //        firstBuy: new Date,
+        //        lastUpdate: new Date,
+        //        percentage: devPercentage,
+        //        tokenBalance: devBuyAmount,
+        //        tradesCount: 1,
+        //        tokenBalanceMax: devBuyAmount,
+        //        type: 'dev',
+        //    }
+        //] : [];
+
 
         const newToken: Token = {
             address: newTokenData.mint,
@@ -184,9 +207,10 @@ export class PumpListener extends ServiceAbstract {
             holders: [],
             boundingCurve: {
                 address: newTokenData.bondingCurveKey,
-                percentage: 100,
-                tokenAmount: totalSupply,
-                solAmount: 0,
+                percentage: curvePercentage,
+                tokenAmount: curveAmount,
+                solAmount: devBuy,
+                completed: false,
             },
             lastUpdated: new Date,
             analyticsSummary: null,
@@ -199,8 +223,8 @@ export class PumpListener extends ServiceAbstract {
                 marketCapUSDMax: marketCapUSD,
                 holdersMin: 0,
                 holdersMax: 0,
-                devBalanceMin: null,
-                devBalanceMax: null,
+                devBalanceMin: devBuyAmount || null,
+                devBalanceMax: devBuyAmount || null,
             },
         };
 

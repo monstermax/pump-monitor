@@ -59,12 +59,12 @@ export class TokenAnalyzer extends ServiceAbstract {
 
 
     /** Déclenche la création de l'analyse d'un token après le mint */
-    private async handleNewToken(token: Token) {
+    private async handleNewToken(token: Token, devTrade?: Trade) {
         //console.log('DEBUG TokenTokenAnalyzerManager: handleNewToken', token);
         //this.log(`Analyse token ${token.address} après mint`);
 
         // Création de l'analyse
-        const analysis = this.createTokenAnalysisAfterMint(token);
+        const analysis = this.createTokenAnalysisAfterMint(token, devTrade);
 
         // Enregistrement de l'analyse
         this.db.addTokenAnalysis(analysis);
@@ -101,14 +101,17 @@ export class TokenAnalyzer extends ServiceAbstract {
         this.updateTokenAnalysisAfterTrade(token, trade);
 
 
+        if (this.trading.isAutoTradingEnabled()) {
+            await this.trading.checkAutoSellConditions([token]);
+        }
     }
 
 
     /** Création de l'analyse d'un token après le mint */
-    private createTokenAnalysisAfterMint(token: Token): TokenAnalysis {
+    private createTokenAnalysisAfterMint(token: Token, devTrade?: Trade): TokenAnalysis {
 
         // Analyse d'opportunité initiale (pour décider d'un achat immédiat)
-        const opportunity = this.opportunityAnalyzer.analyzeInitialOpportunity(token);
+        const opportunity = this.opportunityAnalyzer.analyzeInitialOpportunity(token, devTrade);
 
 
         const tokenAnalysis: TokenAnalysis = {

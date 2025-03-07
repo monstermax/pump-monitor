@@ -36,19 +36,6 @@ export interface TradingResult {
     error?: string;
 }
 
-/* ######################################################### */
-
-
-const tradingRpcs = [
-    appConfig.solana.rpc.chainstack,
-    appConfig.solana.rpc.heliusJpp,
-    appConfig.solana.rpc.quicknode,
-    appConfig.solana.rpc.shyft,
-    appConfig.solana.rpc.nownodes,
-    appConfig.solana.rpc.rockx,
-    appConfig.solana.rpc.omnia,
-];
-
 
 /* ######################################################### */
 
@@ -58,8 +45,8 @@ export class TradingManager extends ServiceAbstract {
     private pendingBuys = 0;
     private pendingSells = 0;
     private lastTradeSlot = 0;
-    //private connection: Connection = new MagicConnection({ rpcs: tradingRpcs });
-    private connection: Connection = new Connection(appConfig.solana.rpc.omnia, { commitment: 'confirmed' });
+    //private connection: Connection = new Connection(appConfig.solana.rpc.omnia, { commitment: 'confirmed' });
+    private connection: Connection = new Connection(appConfig.solana.rpc.helius, { commitment: 'confirmed' });
 
 
     start() {
@@ -141,6 +128,18 @@ export class TradingManager extends ServiceAbstract {
                     error: `Insufficient SOL balance. Required: ${solAmountToSpend}, Available: ${walletBalance.toFixed(4)}, Safety: ${portfolioSettings.minSolInWallet}`,
                 };
             }
+
+            if (token.boundingCurve.completed) {
+                return {
+                    success: false,
+                    txHash: '',
+                    solAmount: 0,
+                    tokenAmount: 0,
+                    error: `Bounding Curve completed !`,
+                };
+
+            }
+
 
             // Vérifier avec le portfolio manager si l'achat est possible
             //const availableAmount = this.portfolio.getBalanceSOL() - appConfig.trading.minSolInWallet;
@@ -266,6 +265,17 @@ export class TradingManager extends ServiceAbstract {
                 };
             }
 
+            if (token.boundingCurve.completed) {
+                return {
+                    success: false,
+                    txHash: '',
+                    solAmount: 0,
+                    tokenAmount: 0,
+                    error: `Bounding Curve completed !`,
+                };
+            }
+
+
             const realTokenBalanceLamports = await getTokenBalance(this.connection, wallet, token.address, this.lastTradeSlot);
             const realTokenBalance = Number(realTokenBalanceLamports) / 1e6;
 
@@ -374,7 +384,7 @@ export class TradingManager extends ServiceAbstract {
                 // Récupérer les données du token
                 const token = tokens.find(_token => _token.address === recommendation.tokenAddress);
 
-                if (token) {
+                if (token && recommendation.amount > 0.000_001) {
                     console.log(`AUTO-SELL triggered for ${recommendation.tokenSymbol} - Reason: ${recommendation.reason}`);
 
                     // Exécuter la vente
@@ -407,13 +417,21 @@ export class TradingManager extends ServiceAbstract {
             throw new Error(`Pas de wallet disponible`);
         }
 
+        if (!solAmount || solAmount < 0.001) {
+            throw new Error(`Quantité invalide`);
+        }
+
         //const mint = new PublicKey(tokenAddress);
         //const priorityFees: PriorityFee | undefined = { unitLimit: 100_000, unitPrice: 100_000 };
         //const commitment: Commitment | undefined = "confirmed";
         //const finality: Finality | undefined = "confirmed";
         //const result: TransactionResult = await pumpFunBuy(this.magicConnection, wallet, mint, BigInt(Math.round(solAmount * 1e9)), BigInt(slippageBasisPoints), priorityFees, commitment, finality);
 
+        this.log(`Envoi d'une transaction d'achat de ${solAmount} SOL du token ${tokenAddress}`);
+
         const result: TransactionResult = await sendPortalBuyTransaction(this.connection, wallet, tokenAddress, solAmount, slippageBasisPoints/100, 0.00001);
+
+        this.log(`Résultat de la transaction d'achat du token ${tokenAddress} => ${result.success ? result.signature : `ERROR : ${result.error}`}`);
 
         return result;
     }
@@ -431,13 +449,21 @@ export class TradingManager extends ServiceAbstract {
             throw new Error(`Pas de wallet disponible`);
         }
 
+        if (!tokenAmount || tokenAmount < 0.000_001) {
+            throw new Error(`Quantité invalide`);
+        }
+
         //const mint = new PublicKey(tokenAddress);
         //const priorityFees: PriorityFee | undefined = { unitLimit: 250_000, unitPrice: 250_000 };
         //const commitment: Commitment | undefined = "confirmed";
         //const finality: Finality | undefined = "confirmed";
         //const result: TransactionResult = await pumpFunSell(this.magicConnection, wallet, mint, BigInt(Math.round(tokenAmount * 1e6)), BigInt(slippageBasisPoints), priorityFees, commitment, finality)
 
+        this.log(`Envoi d'une transaction de vente de ${tokenAmount} $TOKEN du token ${tokenAddress}`);
+
         const result: TransactionResult = await sendPortalSellTransaction(this.connection, wallet, tokenAddress, tokenAmount, slippageBasisPoints/100, 0.00001);
+
+        this.log(`Résultat de la transaction de vente pour le token ${tokenAddress} => ${result.success ? result.signature : `ERROR : ${result.error}`}`);
 
         return result;
 
