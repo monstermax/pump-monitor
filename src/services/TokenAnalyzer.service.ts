@@ -285,7 +285,7 @@ export class TokenAnalyzer extends ServiceAbstract {
                 canBuyResult.recommendedAmount || opportunity.recommendedAmount
             );
 
-            if (result.success) {
+            if (result.success && result.solAmount >= 0.001 && result.tokenAmount > 0.000_001) {
                 this.log(`AUTO-BUY success: Bought ${result.tokenAmount} ${newToken.symbol} for ${result.solAmount.toFixed(4)} SOL`);
                 this.emit('autobuy_success', newToken.address);
 

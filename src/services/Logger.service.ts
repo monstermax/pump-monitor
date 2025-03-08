@@ -20,7 +20,7 @@ type WatchedService = {
 
 /* ######################################################### */
 
-const logDir = '/tmp';
+const logDir = '/tmp/pumpmonitor';
 
 /* ######################################################### */
 
@@ -32,6 +32,10 @@ export class Logger extends ServiceAbstract {
     start() {
         if (this.status !== 'stopped') return;
         super.start();
+
+        if (! fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir);
+        }
 
         this.watch(Array.from(this.watchedService.keys()));
 
@@ -136,31 +140,43 @@ export class Logger extends ServiceAbstract {
 
 
     private writeToFile(service: ServiceAbstract, severity: 'log' | 'notice' | 'warn' | 'error', message: string) {
+        const serviceName = service.constructor.name || 'pumpmonitor-unknown-service';
         let logFile = '';
+        let serviceLogFile = '';
         let text = '';
+        let fileExt = '';
+
+        if (!logDir) return;
+
 
         const now = getUsDateTime;
 
         if (severity === 'error') {
-            logFile = `${logDir}/pumpmonitor.error`;
+            fileExt = 'error';
             text = `${now()} | ${service.constructor.name} | ❌ ${message}`;
 
         } else if (severity === 'warn') {
-            logFile = `${logDir}/pumpmonitor.warn`;
+            fileExt = 'warn';
             text = `${now()} | ${service.constructor.name} | ⚠️ ${message}`;
 
         } else if (severity === 'notice') {
-            logFile = `${logDir}/pumpmonitor.log`;
+            fileExt = 'log';
             text = `${now()} | ${service.constructor.name} | ✅ ${message}`;
 
         } else {
-            logFile = `${logDir}/pumpmonitor.log`;
+            fileExt = 'log';
             text = `${now()} | ${service.constructor.name} | ${message}`;
         }
 
-        if (logDir && logFile && text) {
-            fs.appendFileSync(logFile, text + '\n');
-        }
+        if (!fileExt) return;
+        if (!text) return;
+
+
+        logFile = `${logDir}/pumpmonitor.${fileExt}`;
+        fs.appendFileSync(logFile, text + '\n');
+
+        serviceLogFile = `${logDir}/${serviceName}.${fileExt}`;
+        fs.appendFileSync(serviceLogFile, text + '\n');
     }
 
 }

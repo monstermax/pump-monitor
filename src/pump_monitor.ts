@@ -54,7 +54,7 @@ async function main() {
 
 
     // Vide la base de données MongoDB (optionnel)
-    await db.clearMongoDatabase();
+    //await db.clearMongoDatabase();
 
 
     // Démarre les services

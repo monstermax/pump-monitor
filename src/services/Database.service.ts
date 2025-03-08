@@ -34,6 +34,8 @@ export class Database extends ServiceAbstract {
         if (this.status !== 'stopped') return;
         super.start();
 
+        await this.setupMongoDBIndexes();
+
         // Charger les données depuis MongoDB
         try {
             await this.loadFromMongoDB();
@@ -57,6 +59,37 @@ export class Database extends ServiceAbstract {
 
         super.stopped();
     }
+
+
+
+    private async setupMongoDBIndexes(): Promise<void> {
+        if (!this.mongoDb) return;
+
+        const tokensCollection = this.mongoDb.collection<Token>('tokens');
+        const tokensAnalysisCollection = this.mongoDb.collection<TokenAnalysis>('tokens_analysis');
+        const tokensHoldingsCollection = this.mongoDb.collection<PortfolioHolding>('tokens_holdings');
+
+        try {
+            // Créer un index unique sur l'adresse du token
+            await tokensCollection.createIndex({ address: 1 }, { unique: true });
+            await tokensCollection.createIndex({ createdAt: 1 });
+            await tokensCollection.createIndex({ lastUpdated: 1 });
+
+            // Créer un index unique sur l'adresse du token
+            await tokensAnalysisCollection.createIndex({ tokenAddress: 1 }, { unique: true });
+            await tokensAnalysisCollection.createIndex({ updated: 1 });
+
+            // Créer un index unique sur l'adresse du token
+            await tokensHoldingsCollection.createIndex({ tokenAddress: 1 }, { unique: true });
+            await tokensAnalysisCollection.createIndex({ lastUpdated: 1 });
+
+            console.log("MongoDB indexes created successfully");
+
+        } catch (err: any) {
+            console.error("Error creating MongoDB indexes:", err);
+        }
+    }
+
 
 
     // Méthodes pour la gestion des tokens
@@ -331,15 +364,15 @@ export class Database extends ServiceAbstract {
 
 
         // charges les holdings
-        const tokensHoldingsCollection = this.mongoDb.collection<PortfolioHolding>('tokens_holdings');
-        const tokensHoldingsDocs = await tokensHoldingsCollection.find({}).toArray();
+        //const tokensHoldingsCollection = this.mongoDb.collection<PortfolioHolding>('tokens_holdings');
+        //const tokensHoldingsDocs = await tokensHoldingsCollection.find({}).toArray();
 
-        tokensHoldingsDocs.forEach(holdingDoc => {
-            const holding: PortfolioHolding = convertFromMongo(holdingDoc);
-            if (holding.amount > 0.000_001) {
-                this.inMemoryData.tokensHoldings.set(holding.tokenAddress, holding);
-            }
-        });
+        //tokensHoldingsDocs.forEach(holdingDoc => {
+        //    const holding: PortfolioHolding = convertFromMongo(holdingDoc);
+        //    if (holding.amount > 0.000_001) {
+        //        this.inMemoryData.tokensHoldings.set(holding.tokenAddress, holding);
+        //    }
+        //});
     }
 
 
@@ -376,7 +409,8 @@ export class Database extends ServiceAbstract {
         if (0) {
             const tokensHoldingsCollection = this.mongoDb.collection<PortfolioHolding>('tokens_holdings');
             const tokensHoldingsDocs = await tokensHoldingsCollection.find({}).toArray();
-            const holdingsAddresses = tokensHoldingsDocs.map(holding => holding.tokenAddress);
+
+            const holdingsAddresses = tokensHoldingsDocs.filter(holding => holding.amount > 0).map(holding => holding.tokenAddress);
 
             await this.mongoDb.collection('tokens').deleteMany({ address: { $nin: holdingsAddresses } });
             await this.mongoDb.collection('tokens_analysis').deleteMany({ tokenAddress: { $nin: holdingsAddresses } });
@@ -384,7 +418,7 @@ export class Database extends ServiceAbstract {
         } else {
             await this.mongoDb.collection('tokens').deleteMany({});
             await this.mongoDb.collection('tokens_analysis').deleteMany({});
-            await this.mongoDb.collection('tokens_holdings').deleteMany({});
+            //await this.mongoDb.collection('tokens_holdings').deleteMany({});
 
         }
 

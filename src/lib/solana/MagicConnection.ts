@@ -1,9 +1,11 @@
 // MagicConnection.ts
 
-import { AccountInfo, Commitment, Connection, ConnectionConfig, Finality, GetAccountInfoConfig, GetBalanceConfig, GetVersionedTransactionConfig, Message, ParsedAccountData, ParsedTransactionWithMeta, PublicKey, RpcResponseAndContext, SendOptions, Signer, SimulatedTransactionResponse, SimulateTransactionConfig, TokenAccountsFilter, Transaction, TransactionSignature, VersionedTransaction } from "@solana/web3.js";
+import { AccountInfo, Blockhash, BlockhashWithExpiryBlockHeight, BlockSignatures, Commitment, ConfirmedBlock, ConfirmedTransaction, ConfirmedTransactionMeta, Connection, ConnectionConfig, FeeCalculator, Finality, GetAccountInfoConfig, GetBalanceConfig, GetLatestBlockhashConfig, GetTransactionConfig, GetVersionedTransactionConfig, Message, ParsedAccountData, ParsedConfirmedTransaction, ParsedTransactionWithMeta, PublicKey, RpcResponseAndContext, SendOptions, SignatureResult, Signer, SimulatedTransactionResponse, SimulateTransactionConfig, TokenAccountsFilter, Transaction, TransactionConfirmationStrategy, TransactionResponse, TransactionSignature, VersionedTransaction, VersionedTransactionResponse } from "@solana/web3.js";
 
 import { appConfig } from "../../env";
 import { sleep } from "../utils/time.util";
+
+/* ######################################################### */
 
 
 export type MethodsOf<T> = {
@@ -19,6 +21,8 @@ export type MagicConnectionOptions = {
 };
 
 
+/* ######################################################### */
+
 
 export class MagicConnection extends Connection {
     public proxyOptions: MagicConnectionOptions;
@@ -29,8 +33,28 @@ export class MagicConnection extends Connection {
     }
 
 
+    getTransaction(signature: string, rawConfig?: GetTransactionConfig): Promise<TransactionResponse | null>;
+    getTransaction(signature: string, rawConfig: GetVersionedTransactionConfig): Promise<VersionedTransactionResponse | null>;
+
+    getTransaction(signature: string, rawConfig?: GetTransactionConfig | GetVersionedTransactionConfig): Promise<TransactionResponse | VersionedTransactionResponse | null> {
+        return MagicConnectionMethodWrapper(this, 'getTransaction', signature, rawConfig);
+    }
+
+
+    getTransactions(signatures: TransactionSignature[], commitmentOrConfig?: GetTransactionConfig | Finality): Promise<(TransactionResponse | null)[]>;
+    getTransactions(signatures: TransactionSignature[], commitmentOrConfig: GetVersionedTransactionConfig | Finality): Promise<(VersionedTransactionResponse | null)[]>;
+    getTransactions(signatures: TransactionSignature[], commitmentOrConfig: GetVersionedTransactionConfig | Finality): Promise<((VersionedTransactionResponse | null) | (TransactionResponse | null))[]> {
+        return MagicConnectionMethodWrapper(this, 'getTransactions', signatures, commitmentOrConfig);
+    }
+
+
     getParsedTransaction(signature: TransactionSignature, commitmentOrConfig?: GetVersionedTransactionConfig | Finality): Promise<ParsedTransactionWithMeta | null> {
         return MagicConnectionMethodWrapper(this, 'getParsedTransaction', signature, commitmentOrConfig);
+    }
+
+
+    getParsedTransactions(signatures: TransactionSignature[], commitmentOrConfig?: GetVersionedTransactionConfig | Finality): Promise<(ParsedTransactionWithMeta | null)[]> {
+        return MagicConnectionMethodWrapper(this, 'getParsedTransaction', signatures, commitmentOrConfig);
     }
 
 
@@ -90,6 +114,62 @@ export class MagicConnection extends Connection {
     getAccountInfo(publicKey: PublicKey, commitmentOrConfig?: Commitment | GetAccountInfoConfig): Promise<AccountInfo<Buffer> | null> {
         return MagicConnectionMethodWrapper(this, 'getAccountInfo', publicKey, commitmentOrConfig);
     }
+
+
+    confirmTransaction(strategy: TransactionConfirmationStrategy, commitment?: Commitment): Promise<RpcResponseAndContext<SignatureResult>>
+    confirmTransaction(strategy: TransactionSignature, commitment?: Commitment): Promise<RpcResponseAndContext<SignatureResult>>;
+
+    confirmTransaction(strategy: TransactionConfirmationStrategy | TransactionSignature, commitment: Commitment) {
+        return MagicConnectionMethodWrapper(this, 'confirmTransaction', strategy, commitment);
+    }
+
+
+    getLatestBlockhash(commitmentOrConfig?: Commitment | GetLatestBlockhashConfig): Promise<BlockhashWithExpiryBlockHeight> {
+        return MagicConnectionMethodWrapper(this, 'confirmTransaction', commitmentOrConfig);
+    }
+
+
+    getRecentBlockhash(commitment?: Commitment): Promise<{ blockhash: Blockhash, feeCalculator: FeeCalculator }> {
+        return MagicConnectionMethodWrapper(this, 'confirmTransaction', commitment);
+    }
+
+
+    getConfirmedBlock(slot: number, commitment?: Finality): Promise<ConfirmedBlock> {
+        return MagicConnectionMethodWrapper(this, 'getConfirmedBlock', slot, commitment);
+    }
+
+
+    getBlocks(startSlot: number, endSlot?: number, commitment?: Finality): Promise<Array<number>> {
+        return MagicConnectionMethodWrapper(this, 'getBlocks', startSlot, endSlot, commitment);
+    }
+
+
+    getBlockSignatures(slot: number, commitment?: Finality): Promise<BlockSignatures> {
+        return MagicConnectionMethodWrapper(this, 'getBlockSignatures', slot, commitment);
+    }
+
+
+    getConfirmedBlockSignatures(slot: number, commitment?: Finality): Promise<BlockSignatures> {
+        return MagicConnectionMethodWrapper(this, 'getConfirmedBlockSignatures', slot, commitment);
+    }
+
+
+    getConfirmedTransaction(signature: TransactionSignature, commitment?: Finality): Promise<ConfirmedTransaction | null> {
+        return MagicConnectionMethodWrapper(this, 'getConfirmedTransaction', signature, commitment);
+    }
+
+
+    getParsedConfirmedTransaction(signature: TransactionSignature, commitment?: Finality): Promise<ParsedConfirmedTransaction | null> {
+        return MagicConnectionMethodWrapper(this, 'getParsedConfirmedTransaction', signature, commitment);
+    }
+
+
+    getParsedConfirmedTransactions(signatures: TransactionSignature[], commitment?: Finality): Promise<(ParsedConfirmedTransaction | null)[]> {
+        return MagicConnectionMethodWrapper(this, 'getParsedConfirmedTransactions', signatures, commitment);
+    }
+
+
+
 }
 
 
@@ -130,7 +210,7 @@ export async function MagicConnectionMethod<T>(
     executor: (connection: Connection) => Promise<T>,
     rpcs: string[],
     maxRetries = 3,
-    timeout = 15000,
+    timeout = 10_000,
     maxRpcs = 5,
     methodName?: string
 ): Promise<T> {
@@ -189,7 +269,7 @@ export async function MagicConnectionMethod<T>(
 
     const timeoutPromise = new Promise<T>((_, reject) => {
         timeoutId = setTimeout(() => {
-            console.error(`⏱️ Timeout global de ${timeout}ms dépassé sur tous les RPCs`);
+            console.error(`❌ Timeout global de ${timeout}ms dépassé sur tous les RPCs ${methodName ? `(${methodName})` : ''}`);
             reject(new Error(`Timeout global de ${timeout}ms dépassé`));
         }, timeout);
     });
@@ -200,7 +280,7 @@ export async function MagicConnectionMethod<T>(
         return await Promise.race([...promises, timeoutPromise]);
 
     } catch (err: any) {
-        console.error("Toutes les tentatives ont échoué:", err);
+        console.error(`Toutes les tentatives ${methodName ? `(${methodName})` : ''} ont échoué: ${err.message}`);
 
         // Afficher un résumé des erreurs
         if (errors.size > 0) {

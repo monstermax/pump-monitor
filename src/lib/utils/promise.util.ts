@@ -1,5 +1,7 @@
 // promise.util.ts
 
+import { sleep } from "./time.util";
+
 
 /** Réessaye d'exécuter une fonction asynchrone jusqu'à ce qu'elle réussisse ou que le délai d'expiration soit atteint */
 export async function retryAsync<T>(
@@ -13,14 +15,16 @@ export async function retryAsync<T>(
 
     while (true) {
         attempt++;
+
         try {
             return await operation();
-        } catch (error) {
+
+        } catch (err: any) {
             const elapsedMs = Date.now() - startTime;
 
             // Vérifier si on a dépassé le timeout
             if (elapsedMs + retryIntervalMs >= timeoutMs) {
-                throw new Error(`Opération échouée après ${attempt} tentatives (${elapsedMs}ms): ${error}`);
+                throw new Error(`Opération échouée après ${attempt} tentatives (${elapsedMs}ms): ${err}`);
             }
 
             // Notifier de la nouvelle tentative
@@ -29,7 +33,7 @@ export async function retryAsync<T>(
             }
 
             // Attendre avant de réessayer
-            await new Promise(resolve => setTimeout(resolve, retryIntervalMs));
+            await sleep(retryIntervalMs)
         }
     }
 }

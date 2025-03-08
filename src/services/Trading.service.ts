@@ -4,12 +4,13 @@ import { Commitment, Connection, Finality, ParsedTransactionWithMeta, PublicKey,
 
 import { Token } from "../models/Token.model";
 import { ServiceAbstract } from "./abstract.service";
-import { MagicConnection } from "../lib/solana/MagicConnection";
 import { appConfig } from "../env";
 import { getTokenBalance } from "../lib/solana/account";
 import { SellRecommandation } from "./Portfolio.service";
-import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../lib/pumpfun/pumpfun_api_tx";
-import { decodeTransaction, getParsedTransaction } from "../lib/pumpfun/pumpfun_tx";
+import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../lib/pumpfun/pumpfun_web_api";
+import { decodeTradeTransactionFromLogs, getParsedTransactionWithRetries, TradeTransactionResult } from "../lib/pumpfun/pumpfun_tx";
+import { pumpFunBuy } from "../lib/pumpfun/pumpfun_buy";
+import { pumpFunSell } from "../lib/pumpfun/pumpfun_sell";
 
 /* ######################################################### */
 
@@ -39,13 +40,23 @@ export interface TradingResult {
 
 /* ######################################################### */
 
+const usePumpPortalTransactions = true;
+
+export const MIN_BUY_SOL_AMOUNT = 0.01; // 1.5$
+
+export const MIN_SELL_SOL_VALUE = 0.0001; // 0.015$
+export const MIN_SELL_TOKEN_AMOUNT = 10_000;
+
+/* ######################################################### */
+
 
 export class TradingManager extends ServiceAbstract {
     private autoTrading: boolean = false;
     private pendingBuys = 0;
     private pendingSells = 0;
     private lastTradeSlot = 0;
-    //private connection: Connection = new Connection(appConfig.solana.rpc.omnia, { commitment: 'confirmed' });
+
+    //private connection: Connection = new Connection(appConfig.solana.rpc.chainstack, { commitment: 'confirmed' });
     private connection: Connection = new Connection(appConfig.solana.rpc.helius, { commitment: 'confirmed' });
 
 
@@ -75,7 +86,7 @@ export class TradingManager extends ServiceAbstract {
     /** Activer/désactiver le trading automatique */
     setAutoTrading(enabled: boolean): void {
         this.autoTrading = enabled;
-        console.log(`Auto-trading ${enabled ? 'enabled' : 'disabled'}`);
+        this.log(`Auto-trading ${enabled ? 'enabled' : 'disabled'}`);
     }
 
 
@@ -103,6 +114,8 @@ export class TradingManager extends ServiceAbstract {
     async buyToken(token: Token, solAmountToSpend: number): Promise<TradingResult> {
         const portfolioSettings = await this.portfolio.getSettings();
         if (!portfolioSettings) throw new Error(`Paramètre Portfolio manquants`);
+
+        this.pendingBuys++;
 
         try {
             // Vérifier le solde du wallet avant d'acheter
@@ -161,46 +174,48 @@ export class TradingManager extends ServiceAbstract {
                 };
             }
 
-            this.pendingBuys++;
-
 
             // Execute la transaction d'achat
-            const slippage = 10 * 100; // 5%
+            const slippage = 10; // 10%
             const transactionResult: TransactionResult = await this.executePumpFunBuy(token.address, solAmountToSpend, slippage);
 
             if (! transactionResult.success || ! transactionResult.signature) {
-                // erreur possible: "Error Code: TooMuchSolRequired. Error Number: 6002. Error Message: slippage: Too much SOL required to buy the given amount of tokens.."
-                //await this.portfolio.updateBalanceSol();
-                //await this.portfolio.updateHoldingBalance(token.address, 'buy');
                 throw new Error(`Echec d'achat de token. ${transactionResult.error}`);
             }
 
             this.lastTradeSlot = transactionResult.results?.slot ?? this.lastTradeSlot;
 
             this.log(`Achat du token ${token.address} confirmé`);
+            this.log(`Solscan: https://solscan.io/tx/${transactionResult.signature}`);
 
 
-            // Recupere et décode la transaction
+            // Recupere la transaction
             //const parsedTransaction: ParsedTransactionWithMeta | null = await this.connection.getParsedTransaction(transactionResult.signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
-            const parsedTransaction: ParsedTransactionWithMeta | null = await getParsedTransaction(this.connection, transactionResult.signature);
+
+            const onRetry = (attempt: number, elapsed: number) => {
+                this.log(`Tentative ${attempt} d'obtenir la transaction d'achat (${elapsed}ms écoulées)...`);
+            };
+
+            const parsedTransaction: ParsedTransactionWithMeta | null = await getParsedTransactionWithRetries(this.connection, transactionResult.signature, onRetry);
 
             if (! parsedTransaction) {
                 throw new Error(`Transaction non trouvée`);
             }
 
-            const decodedInstruction = decodeTransaction(parsedTransaction);
+
+            // Decode la transaction
+            const decodedInstruction: TradeTransactionResult | null = decodeTradeTransactionFromLogs(parsedTransaction);
             //console.log('decodedInstruction:', decodedInstruction)
 
             //const decodedInstructions = decodeParsedTransactionInfo(parsedTransaction, 0) as TradeDecodedInstruction[];
             //const decodedInstruction: TradeDecodedInstruction | undefined = decodedInstructions.find(instruction => ['buy', 'sell'].includes(instruction.type)) as TradeDecodedInstruction;
 
             if (! decodedInstruction) {
-                throw new Error(`Intruction décodée non trouvée`);
+                throw new Error(`Intruction d'achat non décodée => tx ${transactionResult.signature}`);
             }
 
-
-            const solAmount = decodedInstruction.sol_amount; // / 1e9;
-            const tokenAmount = decodedInstruction.token_amount; // / 1e6;
+            const solAmount = decodedInstruction.solAmount;
+            const tokenAmount = decodedInstruction.tokenAmount;
 
             const txHash = transactionResult.signature ?? 'TX_HASH_MISSING';
 
@@ -221,7 +236,8 @@ export class TradingManager extends ServiceAbstract {
             };
 
         } catch (err: any) {
-            console.error(`Error buying token ${token.symbol}:`, err);
+            this.error(`Error buying token ${token.symbol}: ${err.message}`);
+
             return {
                 success: false,
                 txHash: '',
@@ -240,6 +256,8 @@ export class TradingManager extends ServiceAbstract {
     async sellToken(token: Token, tokenAmountToSell: number): Promise<TradingResult> {
         const wallet = this.portfolio.getWallet();
         if (!wallet) throw new Error(`Wallet non trouvé. Vente impossible`);
+
+        this.pendingSells++;
 
         try {
             // Récupérer le holding de ce token
@@ -279,8 +297,8 @@ export class TradingManager extends ServiceAbstract {
             const realTokenBalanceLamports = await getTokenBalance(this.connection, wallet, token.address, this.lastTradeSlot);
             const realTokenBalance = Number(realTokenBalanceLamports) / 1e6;
 
-            if (holding.amount !== realTokenBalance) {
-                console.warn(`Adjust token balance. (holding: ${holding.amount.toFixed(6)}) / onchain: ${realTokenBalance.toFixed(6)}`);
+            if (Math.abs(holding.amount - realTokenBalance) < 1) {
+                //this.warn(`Adjust token balance. (holding: ${holding.amount.toFixed(6)}) / onchain: ${realTokenBalance.toFixed(6)}`);
                 holding.amount = realTokenBalance;
             }
 
@@ -301,71 +319,76 @@ export class TradingManager extends ServiceAbstract {
                 }
             }
 
-            this.pendingSells++;
-
 
             // Execute la transaction de vente
-            const slippage = 10 * 100; // 10%
+            const slippage = 10; // 10%
             const transactionResult: TransactionResult = await this.executePumpFunSell(token.address, tokenAmountToSell, slippage);
 
             if (! transactionResult.success || ! transactionResult.signature) {
-                //await this.portfolio.updateBalanceSol();
-                //await this.portfolio.updateHoldingBalance(token.address, 'sell');
                 throw new Error(`Echec de vente de token. ${transactionResult.error}`);
             }
 
             this.lastTradeSlot = transactionResult.results?.slot ?? this.lastTradeSlot;
 
             this.log(`Vente du token ${token.address} confirmée`);
+            this.log(`Solscan: https://solscan.io/tx/${transactionResult.signature}`);
 
 
-            // Recupere et décode la transaction
+            // Recupere la transaction
             //const parsedTransaction: ParsedTransactionWithMeta | null = await this.connection.getParsedTransaction(transactionResult.signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
-            const parsedTransaction: ParsedTransactionWithMeta | null = await getParsedTransaction(this.connection, transactionResult.signature);
+
+            const onRetry = (attempt: number, elapsed: number) => {
+                this.log(`Tentative ${attempt} d'obtenir la transaction de vente (${elapsed}ms écoulées)...`);
+            };
+
+            const parsedTransaction: ParsedTransactionWithMeta | null = await getParsedTransactionWithRetries(this.connection, transactionResult.signature, onRetry);
 
             if (! parsedTransaction) {
                 throw new Error(`Transaction non trouvée`);
             }
 
-            const decodedInstruction = decodeTransaction(parsedTransaction);
+
+            // Decode la transaction
+            const decodedInstruction: TradeTransactionResult | null = decodeTradeTransactionFromLogs(parsedTransaction);
             //console.log('decodedInstruction:', decodedInstruction)
 
             //const decodedInstructions = decodeParsedTransactionInfo(parsedTransaction, 0) as TradeDecodedInstruction[];
             //const decodedInstruction: TradeDecodedInstruction | undefined = decodedInstructions.find(instruction => ['buy', 'sell'].includes(instruction.type)) as TradeDecodedInstruction;
 
             if (! decodedInstruction) {
-                throw new Error(`Intruction décodée non trouvée`);
+                throw new Error(`Intruction de vente non décodée => tx ${transactionResult.signature}`);
             }
 
-
-            const solAmount = decodedInstruction.sol_amount; // / 1e9;
-            const tokenAmount = decodedInstruction.token_amount; // / 1e6;
+            const solAmount = decodedInstruction.solAmount;
+            const tokenAmount = decodedInstruction.tokenAmount;
 
             const txHash = transactionResult.signature ?? 'TX_HASH_MISSING';
+
 
             // Enregistrer la vente dans le portfolio
             await this.portfolio.recordSellTransaction(
                 token,
                 solAmount,
                 tokenAmount,
-                txHash
+                txHash,
             );
 
             return {
                 success: true,
                 txHash,
                 solAmount,
-                tokenAmount: tokenAmountToSell
+                tokenAmount,
             };
 
         } catch (err: any) {
-            console.error(`Error selling token ${token.symbol}:`, err);
+            this.error(`Error selling token ${token.symbol}: ${err.message}`);
+
             return {
                 success: false,
                 txHash: '',
                 solAmount: 0,
                 tokenAmount: 0,
-                error: err.message
+                error: err.message,
             };
 
         } finally {
@@ -383,24 +406,25 @@ export class TradingManager extends ServiceAbstract {
             for (const recommendation of sellRecommendations) {
                 // Récupérer les données du token
                 const token = tokens.find(_token => _token.address === recommendation.tokenAddress);
+                const estimatedSolAmount = token ? recommendation.amount * Number(token.price) : 0;
 
-                if (token && recommendation.amount > 0.000_001) {
-                    console.log(`AUTO-SELL triggered for ${recommendation.tokenSymbol} - Reason: ${recommendation.reason}`);
+                if (token && recommendation.amount > MIN_SELL_TOKEN_AMOUNT && estimatedSolAmount > MIN_SELL_SOL_VALUE) {
+                    this.log(`AUTO-SELL triggered for ${recommendation.tokenSymbol} - Reason: ${recommendation.reason}`);
 
                     // Exécuter la vente
                     const result = await this.sellToken(token, recommendation.amount);
 
                     if (result.success) {
-                        console.log(`AUTO-SELL success: Sold ${result.tokenAmount} ${recommendation.tokenSymbol} for ${result.solAmount.toFixed(4)} SOL`);
+                        this.log(`AUTO-SELL success: Sold ${result.tokenAmount} ${recommendation.tokenSymbol} for ${result.solAmount.toFixed(4)} SOL`);
 
                     } else {
-                        console.error(`AUTO-SELL failed: ${result.error}`);
+                        this.error(`AUTO-SELL failed: ${result.error}`);
                     }
                 }
             }
 
         } catch (err: any) {
-            console.error('Error checking auto-sell conditions:', err);
+            this.error(`Error checking auto-sell conditions: ${err.message}`);
         }
     }
 
@@ -409,7 +433,7 @@ export class TradingManager extends ServiceAbstract {
     private async executePumpFunBuy(
         tokenAddress: string,
         solAmount: number,
-        slippageBasisPoints = 500
+        slippage = 5
     ): Promise<TransactionResult> {
         const wallet = this.portfolio.getWallet();
 
@@ -418,18 +442,26 @@ export class TradingManager extends ServiceAbstract {
         }
 
         if (!solAmount || solAmount < 0.001) {
-            throw new Error(`Quantité invalide`);
+            throw new Error(`Quantité invalide (${solAmount.toFixed(10)} SOL)`);
         }
 
-        //const mint = new PublicKey(tokenAddress);
-        //const priorityFees: PriorityFee | undefined = { unitLimit: 100_000, unitPrice: 100_000 };
-        //const commitment: Commitment | undefined = "confirmed";
-        //const finality: Finality | undefined = "confirmed";
-        //const result: TransactionResult = await pumpFunBuy(this.magicConnection, wallet, mint, BigInt(Math.round(solAmount * 1e9)), BigInt(slippageBasisPoints), priorityFees, commitment, finality);
+
+        let result: TransactionResult;
 
         this.log(`Envoi d'une transaction d'achat de ${solAmount} SOL du token ${tokenAddress}`);
 
-        const result: TransactionResult = await sendPortalBuyTransaction(this.connection, wallet, tokenAddress, solAmount, slippageBasisPoints/100, 0.00001);
+        if (usePumpPortalTransactions) {
+            // Use Pump.fun Web API
+            result = await sendPortalBuyTransaction(this.connection, wallet, tokenAddress, solAmount, slippage, 0.00001);
+
+        } else {
+            // Manually build & send transaction
+            const mint = new PublicKey(tokenAddress);
+            const priorityFees: PriorityFee | undefined = { unitLimit: 100_000, unitPrice: 100_000 };
+            const commitment: Commitment | undefined = "confirmed";
+            const finality: Finality | undefined = "confirmed";
+            result = await pumpFunBuy(this.connection, wallet, mint, BigInt(Math.round(solAmount * 1e9)), BigInt(slippage*100), priorityFees, commitment, finality);
+        }
 
         this.log(`Résultat de la transaction d'achat du token ${tokenAddress} => ${result.success ? result.signature : `ERROR : ${result.error}`}`);
 
@@ -441,7 +473,7 @@ export class TradingManager extends ServiceAbstract {
     private async executePumpFunSell(
         tokenAddress: string,
         tokenAmount: number,
-        slippageBasisPoints = 500
+        slippage = 5
     ): Promise<TransactionResult> {
         const wallet = this.portfolio.getWallet();
 
@@ -449,19 +481,27 @@ export class TradingManager extends ServiceAbstract {
             throw new Error(`Pas de wallet disponible`);
         }
 
-        if (!tokenAmount || tokenAmount < 0.000_001) {
-            throw new Error(`Quantité invalide`);
+        if (!tokenAmount || tokenAmount <= 1) {
+            throw new Error(`Quantité invalide (${tokenAmount} tokens)`);
         }
 
-        //const mint = new PublicKey(tokenAddress);
-        //const priorityFees: PriorityFee | undefined = { unitLimit: 250_000, unitPrice: 250_000 };
-        //const commitment: Commitment | undefined = "confirmed";
-        //const finality: Finality | undefined = "confirmed";
-        //const result: TransactionResult = await pumpFunSell(this.magicConnection, wallet, mint, BigInt(Math.round(tokenAmount * 1e6)), BigInt(slippageBasisPoints), priorityFees, commitment, finality)
+
+        let result: TransactionResult;
 
         this.log(`Envoi d'une transaction de vente de ${tokenAmount} $TOKEN du token ${tokenAddress}`);
 
-        const result: TransactionResult = await sendPortalSellTransaction(this.connection, wallet, tokenAddress, tokenAmount, slippageBasisPoints/100, 0.00001);
+        if (usePumpPortalTransactions) {
+            // Use Pump.fun Web API
+            result = await sendPortalSellTransaction(this.connection, wallet, tokenAddress, tokenAmount, slippage, 0.00001);
+
+        } else {
+            // Manually build & send transaction
+            const mint = new PublicKey(tokenAddress);
+            const priorityFees: PriorityFee | undefined = { unitLimit: 100_000, unitPrice: 100_000 };
+            const commitment: Commitment | undefined = "confirmed";
+            const finality: Finality | undefined = "confirmed";
+            result = await pumpFunSell(this.connection, wallet, mint, BigInt(Math.round(tokenAmount * 1e6)), BigInt(slippage * 100), priorityFees, commitment, finality)
+        }
 
         this.log(`Résultat de la transaction de vente pour le token ${tokenAddress} => ${result.success ? result.signature : `ERROR : ${result.error}`}`);
 

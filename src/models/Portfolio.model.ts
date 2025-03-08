@@ -34,7 +34,7 @@ export interface PortfolioTransaction {
     type: 'buy' | 'sell';
     tokenAmount: number;
     solAmount: number;
-    price: number;          // Prix unitaire en SOL
+    price: string;          // Prix unitaire en SOL
     txHash: string;        // Hash de transaction sur la blockchain
     status: 'pending' | 'confirmed' | 'failed';
 }

@@ -26,6 +26,7 @@ export function subscribeNewToken(ws: WebSocket) {
     ws.send(JSON.stringify(payload)); // result => SubscribeResult + CreateTokenResult
 }
 
+
 export function unsubscribeNewToken(ws: WebSocket) {
     let payload: WsMessagePayload = {
         method: "unsubscribeNewToken",

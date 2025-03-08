@@ -14,17 +14,16 @@ const RpcList = {
     'quicknode': process.env.RPC_QUICKNODE ?? '',
     'alchemy': process.env.RPC_ALCHEMY ?? '',
     'drpc': process.env.RPC_DRPC ?? '',
-    'getblock': process.env.RPC_GETBLOCK ?? '',
-    //'tatum': process.env.RPC_TATUM ?? '',
-    //'ankr': process.env.RPC_ANKR ?? '',
-    //'pokt': process.env.RPC_POKT ?? '',
     'chainstack': process.env.RPC_CHAINSTACK ?? '',
     'shyft': process.env.RPC_SHYFT ?? '',
     'nownodes': process.env.RPC_NOWNODES ?? '',
-    'rockx': process.env.RPC_ROCKX ?? '',
-    'syndica': process.env.RPC_SYNDICA ?? '',
-    'lavanet': process.env.RPC_LAVANET ?? '',
-    'omnia': process.env.RPC_OMNIA ?? '',
+    //'rockx': process.env.RPC_ROCKX ?? '', // slow
+    //'syndica': process.env.RPC_SYNDICA ?? '', // very slow
+    //'lavanet': process.env.RPC_LAVANET ?? '', // very slow
+    //'omnia': process.env.RPC_OMNIA ?? '', // very slow
+    //'getblock': process.env.RPC_GETBLOCK ?? '',
+    //'tatum': process.env.RPC_TATUM ?? '',
+    //'ankr': process.env.RPC_ANKR ?? '',
 };
 
 
@@ -74,19 +73,20 @@ export const appConfig: AppConfig = {
     },
     trading: {
         autoTrading: false,
+        autoBuyEnabled: true,
+        autoSellEnabled: true,
+        // amounts
         minSolInWallet: 0.05,
-        maxConcurrentInvestments: 1,
         maxSolPerToken: 0.1,
         totalPortfolioLimit: 1.0,
-        // buy
-        autoBuyEnabled: true,
-        minTokenScore: 60,
+        // buy conditions
         defaultBuyAmount: 0.01,
-        // sell
-        autoSellEnabled: true,
-        takeProfitPercent: 300,
-        stopLossPercent: 30,
-        trailingStopPercent: 15, // pas utilisé
+        minTokenScore: 60,
+        maxConcurrentInvestments: 1,
+        // sell conditions
+        takeProfitPercent: 50,
+        stopLossPercent: 10,
+        trailingStopPercent: 75,
     },
 };
 

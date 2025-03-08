@@ -44,12 +44,17 @@ export class OpportunityAnalyzer {
         category: string;
     }[] = [
             {
-                keywords: ['ai', 'artificial', 'intelligence', 'gpt', 'llm', 'ml', 'bot'],
+                keywords: ['trump', 'donald', 'baron', 'melania', 'elon', 'musk', 'tesla'],
+                multiplier: 1.6,
+                category: 'Trump'
+            },
+            {
+                keywords: ['ai', 'artificial', 'intelligence', 'gpt', 'llm', 'ml', 'bot', 'grok', 'claude'],
                 multiplier: 1.5,
                 category: 'AI'
             },
             {
-                keywords: ['meme', 'pepe', 'doge', 'wojak', 'cat', 'moon', 'shib', 'inu'],
+                keywords: ['meme', 'pepe', 'doge', 'wojak', 'cat', 'dog', 'moon', 'fifa', 'shib', 'inu', 'pwease', 'bitcoin'],
                 multiplier: 1.3,
                 category: 'Meme'
             },
@@ -133,7 +138,7 @@ export class OpportunityAnalyzer {
 
         // Arrondir le score
         const finalScore = Math.round(weightedScore);
-        console.log('AGE DU TOKEN:', tokenAge, token.address, `(finalScore: ${finalScore} | devBuy: ${devBuy.toFixed(3)} SOL = ${devPercentage.toFixed(2)} %)`)
+        //console.log('AGE DU TOKEN:', tokenAge, token.address, `(finalScore: ${finalScore} | devBuy: ${devBuy.toFixed(3)} SOL = ${devPercentage.toFixed(2)} %)`)
 
         // Déterminer le niveau de confiance
         const confidence = this.calculateConfidence(finalScore, token);

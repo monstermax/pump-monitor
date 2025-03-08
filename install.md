@@ -14,6 +14,7 @@ npm i -D @types/bs58
 
 npm i @raydium-io/raydium-sdk @metaplex-foundation/mpl-token-metadata
 
+npm i @coral-xyz/borsh
 
-#npm i @coral-xyz/anchor @coral-xyz/borsh
+#npm i @coral-xyz/anchor
 
