@@ -29,7 +29,7 @@ export class ServiceAbstract extends EventEmitter {
         if (this.status !== 'starting') return;
         this.status = 'started';
 
-        this.notice(`Service ${this.constructor.name} démarré`);
+        this.success(`Service ${this.constructor.name} démarré`);
         this.emit('service_started');
     }
 
@@ -63,6 +63,10 @@ export class ServiceAbstract extends EventEmitter {
 
     notice(message: string) {
         this.emit('notice', message);
+    }
+
+    success(message: string) {
+        this.emit('success', message);
     }
 
     warn(message: string) {

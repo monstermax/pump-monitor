@@ -59,8 +59,9 @@ export class PortfolioManager extends ServiceAbstract {
     private balanceSOL: number | null = null;
     private portfolioSettings: PortfolioSettings | null = null;
     private portfolioStats: PortfolioStats | null = null;
-    private connection: Connection = new MagicConnection({ rpcs: portfolioRpcs, maxRpcs: 3, maxRetries: 15, timeout: 30_000 });
-    //private connection: Connection = new Connection(appConfig.solana.rpc.lavanet, { commitment: 'confirmed' });
+
+    //private connection: Connection = new MagicConnection({ rpcs: portfolioRpcs, maxRpcs: 3, maxRetries: 15, timeout: 30_000 });
+    private connection: Connection = new Connection(appConfig.solana.rpc.helius, { commitment: 'confirmed' });
 
 
     start() {
@@ -234,7 +235,7 @@ export class PortfolioManager extends ServiceAbstract {
             this.balanceSOL = balanceSOL;
             this.emit('wallet_update', balanceSOL);
 
-            this.log(`Nouveau solde SOL: ${balanceSOL}`)
+            this.notice(`Nouveau solde SOL: ${balanceSOL}`)
         }
     }
 
@@ -587,7 +588,7 @@ export class PortfolioManager extends ServiceAbstract {
         if (newHolding) {
             newHolding.amount = tokenBalance;
 
-            this.log(`Balance du token ${tokenAddress} : ${tokenBalance.toFixed(6)}`);
+            this.notice(`Balance du token ${tokenAddress} : ${tokenBalance.toFixed(6)}`);
 
         } else {
             this.warn(`Holding non trouvé après ${action} ?!`);
@@ -599,7 +600,7 @@ export class PortfolioManager extends ServiceAbstract {
 
 
     // Vérifier s'il faut vendre un token basé sur les conditions de stop loss ou take profit
-    checkSellConditions(): SellRecommandation[] {
+    checkHoldingsSellConditions(): SellRecommandation[] {
         const settings = this.portfolioSettings;
         const holdings = this.db.getAllHoldings();
         const sellRecommendations: SellRecommandation[] = [];
@@ -612,72 +613,10 @@ export class PortfolioManager extends ServiceAbstract {
             const token = this.db.getTokenByAddress(holding.tokenAddress);
             if (!token) throw new Error(`Token à vendre non trouvé`);
 
-            const currentPrice = Number(token.price);
-            const buyPrice = holding.avgBuyPrice;
-            const minPrice = token.kpis.priceMin;
-            const refPrice = Math.max(Number(buyPrice), Number(minPrice))
-            const maxPrice = Number(token.kpis.priceMax);
+            const recommandation = this.checkTokenSellCondition(token, holding);
 
-            const priceOffsetUp = Number(maxPrice) - Number(refPrice);
-            const percentOfMaxGain = 100 * (currentPrice - Number(refPrice)) / priceOffsetUp;
-
-            const tokenAnalysis = this.db.getTokenAnalysis(holding.tokenAddress);
-
-
-            if (holding.amount * currentPrice < MIN_SELL_SOL_VALUE || holding.amount <= MIN_SELL_TOKEN_AMOUNT) {
-                sellRecommendations.push({
-                    tokenAddress: holding.tokenAddress,
-                    tokenSymbol: holding.tokenSymbol,
-                    amount: 0, // ne pas vendre
-                    reason: 'wothless' as const
-                });
-
-            } else if (Date.now() - token.lastUpdated.getTime() > 30_000) {
-                // Pas d'activité depuis plus de 30 secondes
-                sellRecommendations.push({
-                    tokenAddress: holding.tokenAddress,
-                    tokenSymbol: holding.tokenSymbol,
-                    amount: holding.amount, // Vendre 100%
-                    reason: 'abandonned' as const
-                });
-
-            } else if (holding.profitLossPercent >= settings.takeProfitPercent) {
-                // Take profit
-                sellRecommendations.push({
-                    tokenAddress: holding.tokenAddress,
-                    tokenSymbol: holding.tokenSymbol,
-                    amount: holding.amount, // Vendre 100% quand on atteint take profit
-                    reason: 'take_profit' as const
-                });
-
-            } else if (holding.profitLossPercent <= -settings.stopLossPercent) {
-                // Stop loss
-                sellRecommendations.push({
-                    tokenAddress: holding.tokenAddress,
-                    tokenSymbol: holding.tokenSymbol,
-                    amount: holding.amount, // Vendre 100% en stop loss
-                    reason: 'stop_loss' as const
-                });
-
-            } else if (percentOfMaxGain < settings.trailingStopPercent) {
-                // trailing stop
-                sellRecommendations.push({
-                    tokenAddress: holding.tokenAddress,
-                    tokenSymbol: holding.tokenSymbol,
-                    amount: holding.amount, // Vendre 100%
-                    reason: 'trailing_stop' as const
-                });
-
-            } else if (tokenAnalysis && tokenAnalysis.tradingSignal.action === 'SELL' && tokenAnalysis.tradingSignal.confidence >= 75) {
-                sellRecommendations.push({
-                    tokenAddress: holding.tokenAddress,
-                    tokenSymbol: holding.tokenSymbol,
-                    amount: holding.amount, // Vendre 100%
-                    reason: 'analysis_sell_recommandation' as const
-                });
-
-            } else if (token.trends) {
-                // TODO: gérer les trends puis implémenter une decision à partir de la trend very_short
+            if (recommandation) {
+                sellRecommendations.push(recommandation);
             }
 
         }
@@ -686,8 +625,84 @@ export class PortfolioManager extends ServiceAbstract {
     }
 
 
-    // Vérifier si on peut acheter un nouveau token basé sur les conditions actuelles
-    canBuyToken(tokenAddress: string, score: number, solAmount?: number): {
+    checkTokenSellCondition(token: Token, holding: PortfolioHolding): SellRecommandation | null {
+        const settings = this.portfolioSettings;
+        if (!settings) return null;
+
+        const currentPrice = Number(token.price);
+        const buyPrice = holding.avgBuyPrice;
+        const minPrice = token.kpis.priceMin;
+        const refPrice = Math.max(Number(buyPrice), Number(minPrice))
+        const maxPrice = Number(token.kpis.priceMax);
+
+        const priceOffsetUp = Number(maxPrice) - Number(refPrice);
+        const percentOfMaxGain = 100 * (currentPrice - Number(refPrice)) / priceOffsetUp;
+
+        const tokenAnalysis = this.db.getTokenAnalysis(holding.tokenAddress);
+
+        let sellRecommendation: SellRecommandation | null = null;
+
+        if (holding.amount * currentPrice < MIN_SELL_SOL_VALUE || holding.amount <= MIN_SELL_TOKEN_AMOUNT) {
+            sellRecommendation = {
+                tokenAddress: holding.tokenAddress,
+                tokenSymbol: holding.tokenSymbol,
+                amount: 0, // ne pas vendre
+                reason: 'wothless' as const
+            };
+
+        } else if (Date.now() - token.lastUpdated.getTime() > 30_000) {
+            // Pas d'activité depuis plus de 30 secondes
+            sellRecommendation = {
+                tokenAddress: holding.tokenAddress,
+                tokenSymbol: holding.tokenSymbol,
+                amount: holding.amount, // Vendre 100%
+                reason: 'abandonned' as const
+            };
+
+        } else if (holding.profitLossPercent >= settings.takeProfitPercent) {
+            // Take profit
+            sellRecommendation = {
+                tokenAddress: holding.tokenAddress,
+                tokenSymbol: holding.tokenSymbol,
+                amount: holding.amount, // Vendre 100% quand on atteint take profit
+                reason: 'take_profit' as const
+            };
+
+        } else if (holding.profitLossPercent <= -settings.stopLossPercent) {
+            // Stop loss
+            sellRecommendation = {
+                tokenAddress: holding.tokenAddress,
+                tokenSymbol: holding.tokenSymbol,
+                amount: holding.amount, // Vendre 100% en stop loss
+                reason: 'stop_loss' as const
+            };
+
+        } else if (percentOfMaxGain < settings.trailingStopPercent) {
+            // trailing stop
+            sellRecommendation = {
+                tokenAddress: holding.tokenAddress,
+                tokenSymbol: holding.tokenSymbol,
+                amount: holding.amount, // Vendre 100%
+                reason: 'trailing_stop' as const
+            };
+
+        } else if (tokenAnalysis && tokenAnalysis.tradingSignal.action === 'SELL' && tokenAnalysis.tradingSignal.confidence >= 75) {
+            sellRecommendation = {
+                tokenAddress: holding.tokenAddress,
+                tokenSymbol: holding.tokenSymbol,
+                amount: holding.amount, // Vendre 100%
+                reason: 'analysis_sell_recommandation' as const
+            };
+
+        } else if (token.trends) {
+            // TODO: gérer les trends puis implémenter une decision à partir de la trend very_short
+        }
+
+        return sellRecommendation;
+    }
+
+
+    canAutoBuyToken(tokenAddress: string, score: number, solAmount?: number): {
         canBuy: boolean,
         reason?: string,
         recommendedAmount?: number
@@ -704,12 +719,19 @@ export class PortfolioManager extends ServiceAbstract {
             return { canBuy: false, reason: 'stats manquants' };
         }
 
-        // Montant à investir
         let solAmountToInvest = solAmount || settings.defaultBuyAmount;
 
         // Vérifier si l'achat automatique est activé
-        if (!settings.autoBuyEnabled || !solAmount) {
+        if (!settings.autoBuyEnabled || !solAmountToInvest) {
             return { canBuy: false, reason: 'Auto buy is disabled' };
+        }
+
+        // Vérifier le nombre maximum d'investissements simultanés
+        const activeHoldings = holdings.filter(holding => !holding.closed && holding.amount >= MIN_SELL_TOKEN_AMOUNT);
+        const activeHoldingsCount = activeHoldings.length + this.trading.getPendingBuys();
+
+        if (activeHoldingsCount >= settings.maxConcurrentInvestments) {
+            return { canBuy: false, reason: 'Maximum concurrent investments reached' };
         }
 
         // Vérifier si on a déjà ce token
@@ -718,18 +740,9 @@ export class PortfolioManager extends ServiceAbstract {
             return { canBuy: false, reason: 'Token already in portfolio' };
         }
 
-        // Vérifier le nombre maximum d'investissements simultanés
-        const activeHoldingsCount = holdings.filter(holding => !holding.closed && holding.amount >= 1).length + this.trading.getPendingBuys();
-
-        if (activeHoldingsCount >= settings.maxConcurrentInvestments) {
-            return { canBuy: false, reason: 'Maximum concurrent investments reached' };
-        }
-
-        const availableSolAmount = this.getBalanceSOL() - appConfig.trading.minSolInWallet;
-
-        // Vérifier la limite du wallet (SOL)
-        if (solAmountToInvest > availableSolAmount) {
-            solAmountToInvest = availableSolAmount;
+        // Vérifier les scores de sécurité et de risque
+        if (score < settings.minTokenScore) {
+            return { canBuy: false, reason: `Token Score too low (${score}). Required: score > ${settings.minTokenScore}` };
         }
 
         // Vérifier la limite totale du portefeuille (positions ouvertes)
@@ -742,18 +755,71 @@ export class PortfolioManager extends ServiceAbstract {
             solAmountToInvest = settings.maxSolPerToken;
         }
 
+        return this.canSpendSolAmount(solAmountToInvest);
+    }
+
+
+    // Vérifier si on peut acheter un nouveau token basé sur les conditions actuelles
+    canSpendSolAmount(solAmount: number): {
+        canBuy: boolean,
+        reason?: string,
+        recommendedAmount?: number
+    } {
+        const settings = this.portfolioSettings;
+        const stats = this.portfolioStats;
+
+        if (!settings) {
+            return { canBuy: false, reason: 'settings manquants' };
+        }
+
+        if (!stats) {
+            return { canBuy: false, reason: 'stats manquants' };
+        }
+
+
+        // Montant à investir
+        let solAmountToInvest = solAmount;
+
+
+        // Vérifier le solde du wallet avant d'acheter
+        const walletBalance = this.getBalanceSOL();
+        const availableSolAmount = walletBalance - settings.minSolInWallet;
+
+        if (solAmountToInvest > availableSolAmount) {
+            solAmountToInvest = availableSolAmount;
+        }
+
         if (solAmountToInvest < MIN_BUY_SOL_AMOUNT) { // Seuil minimum pour que ça vaille la peine
-            return { canBuy: false, reason: `Portfolio limit reached (balance = ${availableSolAmount.toFixed(3)} SOL | ${activeHoldingsCount} active holdings => amount = ${stats.totalValue.toFixed(3)} SOL)` };
+            return { canBuy: false, reason: `Montant à investir (${solAmountToInvest.toFixed(3)} SOL) trop petit (minimum: ${MIN_BUY_SOL_AMOUNT} SOL)` };
         }
 
-
-        // Vérifier les scores de sécurité et de risque
-        if (score < settings.minTokenScore) {
-            return { canBuy: false, reason: `Token Score too low (${score}). Required: score > ${settings.minTokenScore}` };
-        }
 
         // Tous les contrôles sont passés
         return { canBuy: true, recommendedAmount: solAmountToInvest };
+    }
+
+
+    canAutoSellToken(tokenAddress: string, tokenAmountToSell?: number): {
+        canSell: boolean,
+        reason?: string,
+        recommendedAmount?: number
+    } {
+        if (this.trading.getPendingSells() > 0) {
+            return { canSell: false, reason: 'Maximum concurrent sells reached' };
+        }
+
+        return this.canSpendTokenAmount(tokenAddress, tokenAmountToSell);
+    }
+
+
+    canSpendTokenAmount(tokenAddress: string, tokenAmountToSell?: number): {
+        canSell: boolean,
+        reason?: string,
+        recommendedAmount?: number
+    } {
+
+        // Tous les contrôles sont passés
+        return { canSell: true, recommendedAmount: tokenAmountToSell };
     }
 
 
@@ -819,7 +885,7 @@ export class PortfolioManager extends ServiceAbstract {
         // mise a jour du solde de tokens (holding. pas les holders)
         await this.updateHoldingBalance(token.address, 'buy');
 
-        this.log(`Balances du token ${token.address} mise à jour après l'achat`);
+        this.log(`Balance du token ${token.address} mise à jour après l'achat`);
     }
 
 
@@ -893,7 +959,7 @@ export class PortfolioManager extends ServiceAbstract {
         // mise a jour du solde de tokens (holding. pas les holders)
         await this.updateHoldingBalance(token.address, 'sell');
 
-        this.log(`Balances du token ${token.address} mise à jour après la vente`);
+        this.log(`Balance du token ${token.address} mise à jour après la vente`);
 
     }
 

@@ -110,7 +110,7 @@ export class PumpWebsocketApi extends ServiceAbstract {
         this.ws = new WebSocket(appConfig.websocketApi.url);
 
         this.ws.on('open', () => {
-            this.notice('Connected to PumpFun API WebSocket (PumpWebsocketApi)');
+            this.success('Connected to PumpFun API WebSocket (PumpWebsocketApi)');
 
             this.isConnected = true;
             this.setupPing();

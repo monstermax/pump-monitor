@@ -11,6 +11,7 @@ import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../lib/pump
 import { decodeTradeTransactionFromLogs, getParsedTransactionWithRetries, TradeTransactionResult } from "../lib/pumpfun/pumpfun_tx";
 import { pumpFunBuy } from "../lib/pumpfun/pumpfun_buy";
 import { pumpFunSell } from "../lib/pumpfun/pumpfun_sell";
+import { OpportunityAnalysis } from "../analyzers/opportunity-analyzer";
 
 /* ######################################################### */
 
@@ -68,13 +69,7 @@ export class TradingManager extends ServiceAbstract {
         // Vérifier les conditions de vente automatique toutes les 30 secondes
         this.intervals.checkAutoSellConditions = setInterval(async () => {
             if (this.autoTrading) {
-                const holdings = this.db.getAllHoldings()
-                const holdingsAddresses = holdings.map(holding => holding.tokenAddress);
-
-                const tokens = this.db.selectTokens()
-                    .filter(token => holdingsAddresses.includes(token.address));
-
-                await this.checkAutoSellConditions(tokens);
+                await this.checkAutoSellConditions();
             }
         }, 10_000);
 
@@ -118,9 +113,6 @@ export class TradingManager extends ServiceAbstract {
         this.pendingBuys++;
 
         try {
-            // Vérifier le solde du wallet avant d'acheter
-            const walletBalance = await this.portfolio.getBalanceSOL();
-            const availableWalletBalance = walletBalance - portfolioSettings.minSolInWallet;
 
             if (solAmountToSpend <= 0) {
                 return {
@@ -129,16 +121,6 @@ export class TradingManager extends ServiceAbstract {
                     solAmount: 0,
                     tokenAmount: 0,
                     error: `Empty amount to buy`,
-                };
-            }
-
-            if (availableWalletBalance < solAmountToSpend) {
-                return {
-                    success: false,
-                    txHash: '',
-                    solAmount: 0,
-                    tokenAmount: 0,
-                    error: `Insufficient SOL balance. Required: ${solAmountToSpend}, Available: ${walletBalance.toFixed(4)}, Safety: ${portfolioSettings.minSolInWallet}`,
                 };
             }
 
@@ -158,11 +140,7 @@ export class TradingManager extends ServiceAbstract {
             //const availableAmount = this.portfolio.getBalanceSOL() - appConfig.trading.minSolInWallet;
             //const canBuyResult = availableAmount > 0.01 ? { canBuy: true } : { canBuy: false, reason: `Too many available funds` };
 
-            const canBuyResult = this.portfolio.canBuyToken(
-                token.address,
-                80, // Simulation d'un score
-                solAmountToSpend
-            );
+            const canBuyResult = this.portfolio.canSpendSolAmount(solAmountToSpend);
 
             if (!canBuyResult.canBuy) {
                 return {
@@ -185,7 +163,7 @@ export class TradingManager extends ServiceAbstract {
 
             this.lastTradeSlot = transactionResult.results?.slot ?? this.lastTradeSlot;
 
-            this.log(`Achat du token ${token.address} confirmé`);
+            this.success(`Achat du token ${token.address} confirmé`);
             this.log(`Solscan: https://solscan.io/tx/${transactionResult.signature}`);
 
 
@@ -211,11 +189,13 @@ export class TradingManager extends ServiceAbstract {
             //const decodedInstruction: TradeDecodedInstruction | undefined = decodedInstructions.find(instruction => ['buy', 'sell'].includes(instruction.type)) as TradeDecodedInstruction;
 
             if (! decodedInstruction) {
-                throw new Error(`Intruction d'achat non décodée => tx ${transactionResult.signature}`);
+                //throw new Error(`Intruction d'achat non décodée => tx ${transactionResult.signature}`);
+                this.warn(`Intruction d'achat non décodée => tx ${transactionResult.signature}`);
             }
 
-            const solAmount = decodedInstruction.solAmount;
-            const tokenAmount = decodedInstruction.tokenAmount;
+            const { solAmount, tokenAmount } = decodedInstruction ?? { solAmount: solAmountToSpend, tokenAmount: solAmountToSpend * Number(token.price) }
+            //const solAmount = decodedInstruction.solAmount;
+            //const tokenAmount = decodedInstruction.tokenAmount;
 
             const txHash = transactionResult.signature ?? 'TX_HASH_MISSING';
 
@@ -236,7 +216,7 @@ export class TradingManager extends ServiceAbstract {
             };
 
         } catch (err: any) {
-            this.error(`Error buying token ${token.symbol}: ${err.message}`);
+            this.error(`Error buying token ${token.address}: ${err.message}`);
 
             return {
                 success: false,
@@ -269,7 +249,7 @@ export class TradingManager extends ServiceAbstract {
                     txHash: '',
                     solAmount: 0,
                     tokenAmount: 0,
-                    error: `No holding found for token ${token.symbol}`,
+                    error: `No holding found for token ${token.address}`,
                 };
             }
 
@@ -330,7 +310,7 @@ export class TradingManager extends ServiceAbstract {
 
             this.lastTradeSlot = transactionResult.results?.slot ?? this.lastTradeSlot;
 
-            this.log(`Vente du token ${token.address} confirmée`);
+            this.success(`Vente du token ${token.address} confirmée`);
             this.log(`Solscan: https://solscan.io/tx/${transactionResult.signature}`);
 
 
@@ -356,11 +336,13 @@ export class TradingManager extends ServiceAbstract {
             //const decodedInstruction: TradeDecodedInstruction | undefined = decodedInstructions.find(instruction => ['buy', 'sell'].includes(instruction.type)) as TradeDecodedInstruction;
 
             if (! decodedInstruction) {
-                throw new Error(`Intruction de vente non décodée => tx ${transactionResult.signature}`);
+                //throw new Error(`Intruction de vente non décodée => tx ${transactionResult.signature}`);
+                this.warn(`Intruction de vente non décodée => tx ${transactionResult.signature}`);
             }
 
-            const solAmount = decodedInstruction.solAmount;
-            const tokenAmount = decodedInstruction.tokenAmount;
+            const { solAmount, tokenAmount } = decodedInstruction ?? { solAmount: tokenAmountToSell / Number(token.price), tokenAmount: tokenAmountToSell }
+            //const solAmount = decodedInstruction.solAmount;
+            //const tokenAmount = decodedInstruction.tokenAmount;
 
             const txHash = transactionResult.signature ?? 'TX_HASH_MISSING';
 
@@ -381,7 +363,7 @@ export class TradingManager extends ServiceAbstract {
             };
 
         } catch (err: any) {
-            this.error(`Error selling token ${token.symbol}: ${err.message}`);
+            this.error(`Error selling token ${token.address}: ${err.message}`);
 
             return {
                 success: false,
@@ -398,35 +380,95 @@ export class TradingManager extends ServiceAbstract {
 
 
     // Vérifier si des conditions de vente automatique sont remplies
-    async checkAutoSellConditions(tokens: Token[]): Promise<void> {
+    async checkAutoSellConditions(): Promise<void> {
         try {
             // Récupérer les recommandations de vente
-            const sellRecommendations: SellRecommandation[] = this.portfolio.checkSellConditions();
+            const sellRecommendations: SellRecommandation[] = this.portfolio.checkHoldingsSellConditions();
 
             for (const recommendation of sellRecommendations) {
-                // Récupérer les données du token
-                const token = tokens.find(_token => _token.address === recommendation.tokenAddress);
-                const estimatedSolAmount = token ? recommendation.amount * Number(token.price) : 0;
+                const token = this.db.getTokenByAddress(recommendation.tokenAddress);
 
-                if (token && recommendation.amount > MIN_SELL_TOKEN_AMOUNT && estimatedSolAmount > MIN_SELL_SOL_VALUE) {
-                    this.log(`AUTO-SELL triggered for ${recommendation.tokenSymbol} - Reason: ${recommendation.reason}`);
-
-                    // Exécuter la vente
-                    const result = await this.sellToken(token, recommendation.amount);
-
-                    if (result.success) {
-                        this.log(`AUTO-SELL success: Sold ${result.tokenAmount} ${recommendation.tokenSymbol} for ${result.solAmount.toFixed(4)} SOL`);
-
-                    } else {
-                        this.error(`AUTO-SELL failed: ${result.error}`);
-                    }
+                if (token) {
+                    this.autoSell(token, recommendation)
                 }
+
             }
 
         } catch (err: any) {
             this.error(`Error checking auto-sell conditions: ${err.message}`);
         }
     }
+
+
+    /** Achète un token de facon automatisée suite à une opportunité d'achat */
+    async autoBuy(newToken: Token, opportunity: OpportunityAnalysis) {
+
+        if (this.trading.getPendingBuys() > 0 || this.trading.getPendingSells() > 0) {
+            return;
+        }
+
+        this.notice(`AUTO-BUY triggered for ${newToken.address} (Score: ${opportunity.score})`);
+
+        // Vérifier si on peut acheter
+        const canBuyResult = await this.portfolio.canAutoBuyToken(
+            newToken.address,
+            opportunity.score,
+            opportunity.recommendedAmount
+        );
+
+        if (canBuyResult.canBuy) {
+            // Exécuter l'achat automatique
+            const result = await this.trading.buyToken(
+                newToken,
+                canBuyResult.recommendedAmount || opportunity.recommendedAmount
+            );
+
+            if (result.success && result.solAmount >= 0.001 && result.tokenAmount > 0.000_001) {
+                this.success(`AUTO-BUY success: Bought ${result.tokenAmount} ${newToken.address} for ${result.solAmount.toFixed(4)} SOL`);
+                this.emit('autobuy_success', newToken.address);
+
+            } else {
+                this.error(`AUTO-BUY failed: ${result.error}`);
+                this.emit('autobuy_failed', newToken.address);
+            }
+
+        } else {
+            this.log(`AUTO-BUY skipped: ${canBuyResult.reason}`);
+        }
+    }
+
+
+    async autoSell(token: Token, recommendation: SellRecommandation) {
+        const estimatedSolAmount = token ? recommendation.amount * Number(token.price) : 0;
+
+        if (this.trading.getPendingBuys() > 0 || this.trading.getPendingSells() > 0) {
+            return;
+        }
+
+        if (token && recommendation.amount > MIN_SELL_TOKEN_AMOUNT && estimatedSolAmount > MIN_SELL_SOL_VALUE) {
+            this.notice(`AUTO-SELL triggered for ${recommendation.tokenAddress} - Reason: ${recommendation.reason}`);
+
+            const canSellResult = this.portfolio.canAutoSellToken(token.address, recommendation.amount);
+
+            if (!canSellResult.canSell) {
+                this.warn(`AUTO-BUY skipped: ${canSellResult.reason}`);
+                return;
+            }
+
+            // Exécuter la vente
+            const result = await this.sellToken(token, recommendation.amount);
+
+            if (result.success) {
+                this.success(`AUTO-SELL success: Sold ${result.tokenAmount} ${recommendation.tokenSymbol} for ${result.solAmount.toFixed(4)} SOL`);
+                this.emit('autosell_success', token.address);
+
+            } else {
+                this.error(`AUTO-SELL failed: ${result.error}`);
+                this.emit('autosell_failed', token.address);
+            }
+        }
+    }
+
 
 
     /** Implémentation de la logique d'achat sur pump.fun en utilisant l'API de Solana Web3.js et les instructions spécifiques à pump.fun */

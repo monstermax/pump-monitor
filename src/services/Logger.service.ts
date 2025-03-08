@@ -13,6 +13,7 @@ type WatchedService = {
     listening: boolean,
     onServiceLog: (message: string) => void | null,
     onServiceNotice: (message: string) => void | null,
+    onServiceSuccess: (message: string) => void | null,
     onServiceWarn: (message: string) => void | null,
     onServiceError: (message: string) => void | null,
 }
@@ -69,6 +70,11 @@ export class Logger extends ServiceAbstract {
                     this.writeToFile(service, 'notice', message);
                 }
 
+                const onServiceSuccess = (message: string) => {
+                    this.displayConsole(service, 'success', message);
+                    this.writeToFile(service, 'success', message);
+                }
+
                 const onServiceWarn = (message: string) => {
                     this.displayConsole(service, 'warn', message);
                     this.writeToFile(service, 'warn', message);
@@ -79,7 +85,7 @@ export class Logger extends ServiceAbstract {
                     this.writeToFile(service, 'error', message);
                 }
 
-                this.watchedService.set(service, { listening: false, onServiceLog, onServiceNotice, onServiceWarn, onServiceError })
+                this.watchedService.set(service, { listening: false, onServiceLog, onServiceNotice, onServiceSuccess, onServiceWarn, onServiceError })
             }
 
             if (this.status === 'started' || this.status === 'starting') {
@@ -90,6 +96,7 @@ export class Logger extends ServiceAbstract {
 
                     service.on('log', serviceInfos.onServiceLog);
                     service.on('notice', serviceInfos.onServiceNotice);
+                    service.on('success', serviceInfos.onServiceSuccess);
                     service.on('warn', serviceInfos.onServiceWarn);
                     service.on('error', serviceInfos.onServiceError);
                     serviceInfos.listening = true;
@@ -108,6 +115,7 @@ export class Logger extends ServiceAbstract {
 
             service.off('log', serviceInfos.onServiceLog);
             service.off('notice', serviceInfos.onServiceNotice);
+            service.off('success', serviceInfos.onServiceSuccess);
             service.off('warn', serviceInfos.onServiceWarn);
             service.off('error', serviceInfos.onServiceError);
 
@@ -117,7 +125,7 @@ export class Logger extends ServiceAbstract {
     }
 
 
-    private displayConsole(service: ServiceAbstract, severity: 'log' | 'notice' | 'warn' | 'error', message: string) {
+    private displayConsole(service: ServiceAbstract, severity: 'log' | 'notice' | 'success' | 'warn' | 'error', message: string) {
 
         const now = function (date?: Date) {
             return (date ?? new Date).toLocaleTimeString();
@@ -130,8 +138,11 @@ export class Logger extends ServiceAbstract {
         } else if (severity === 'warn') {
             console.warn(`${now()} | ${service.constructor.name} | ⚠️ ${message}`);
 
-        } else if (severity === 'notice') {
+        } else if (severity === 'success') {
             console.log(`${now()} | ${service.constructor.name} | ✅ ${message}`);
+
+        } else if (severity === 'notice') {
+            console.log(`${now()} | ${service.constructor.name} | 📢 ${message}`);
 
         } else {
             console.log(`${now()} | ${service.constructor.name} | ${message}`);
@@ -139,7 +150,7 @@ export class Logger extends ServiceAbstract {
     }
 
 
-    private writeToFile(service: ServiceAbstract, severity: 'log' | 'notice' | 'warn' | 'error', message: string) {
+    private writeToFile(service: ServiceAbstract, severity: 'log' | 'notice' | 'success' | 'warn' | 'error', message: string) {
         const serviceName = service.constructor.name || 'pumpmonitor-unknown-service';
         let logFile = '';
         let serviceLogFile = '';
@@ -159,9 +170,13 @@ export class Logger extends ServiceAbstract {
             fileExt = 'warn';
             text = `${now()} | ${service.constructor.name} | ⚠️ ${message}`;
 
-        } else if (severity === 'notice') {
+        } else if (severity === 'success') {
             fileExt = 'log';
             text = `${now()} | ${service.constructor.name} | ✅ ${message}`;
+
+        } else if (severity === 'notice') {
+            fileExt = 'log';
+            text = `${now()} | ${service.constructor.name} | 📢 ${message}`;
 
         } else {
             fileExt = 'log';
