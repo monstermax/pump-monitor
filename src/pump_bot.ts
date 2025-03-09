@@ -553,6 +553,7 @@ class PumpBot {
         const txResult: TransactionResult = await sendPortalTransaction(this.connection, tx);
 
         if (! txResult.success || !txResult.signature) {
+            /*
             console.warn(`Erreur pendant l'achat`);
 
             if (txResult.error) {
@@ -564,6 +565,7 @@ class PumpBot {
 
                 //console.log('ERR', txResult.error.transactionError)
             }
+            */
 
             throw new Error(`Erreur pendant l'achat. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
@@ -635,6 +637,7 @@ class PumpBot {
         const txResult: TransactionResult = await sendPortalTransaction(this.connection, tx);
 
         if (! txResult.success || !txResult.signature) {
+            /*
             console.warn(`Erreur pendant la vente`);
 
             if (txResult.error) {
@@ -646,6 +649,7 @@ class PumpBot {
 
                 //console.log('ERR', txResult.error.transactionError)
             }
+            */
 
             throw new Error(`Erreur pendant la vente. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
