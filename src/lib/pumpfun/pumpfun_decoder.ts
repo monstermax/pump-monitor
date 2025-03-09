@@ -89,13 +89,13 @@ export function parsePumpTransaction(txData: VersionedTransactionResponse): Pump
         return result;
 
     } else if (instructionType === 'buy') {
-        fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_buy.json`, JSON.stringify(txData, null, 4));
+        //fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_buy.json`, JSON.stringify(txData, null, 4));
 
         const buyResult: TradeInfo = parseBuyInstruction(txData);
         return buyResult;
 
     } else if (instructionType === 'sell') {
-        fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_sell.json`, JSON.stringify(txData, null, 4));
+        //fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_sell.json`, JSON.stringify(txData, null, 4));
 
         const sellResult: TradeInfo = parseSellInstruction(txData);
         return sellResult;
