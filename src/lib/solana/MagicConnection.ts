@@ -265,8 +265,9 @@ export async function MagicConnectionMethod<T>(
 
                     // Attendre un peu plus longtemps à chaque tentative
                     if (attempt < maxRetries) {
-                        const delay = 1000 * attempt;
-                        await sleep(delay);
+                        //const delay = 1000 * attempt;
+                        //await sleep(delay);
+                        await sleep(timeout / maxRetries);
                     }
                 }
 
