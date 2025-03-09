@@ -535,7 +535,7 @@ class PumpBot {
 
         // 1) créer transaction buy
         const tx = await buildPortalBuyTransaction(this.wallet, this.currentToken, solAmount);
-        console.log('buy tx:', tx);
+        //console.log('buy tx:', tx);
         //const decoded = parsePumpTransaction(tx);
         //fs.writeFileSync(`${__dirname}/../tmp/pump_tx_buy.json`, JSON.stringify(tx, null, 4)); if (1) process.exit();
 
@@ -585,7 +585,7 @@ class PumpBot {
 
         // 1) créer transaction sell
         const tx = await buildPortalSellTransaction(this.wallet, this.currentToken, tokenAmount);
-        console.log('sell tx:', tx);
+        //console.log('sell tx:', tx);
         //fs.writeFileSync(`${__dirname}/../tmp/pump_tx_sell.json`, JSON.stringify(tx, null, 4)); if (1) process.exit();
 
         // 2) envoyer transaction sell
