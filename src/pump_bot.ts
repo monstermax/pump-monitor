@@ -334,8 +334,6 @@ class PumpBot {
         if (checkForBuyResult.canBuy) {
             this.pumpfunWebsocketApiSubscriptions?.unsubscribeToNewTokens();
 
-            console.log(`Achat en cours du token ${mintMessage.mint}. Step 1/3`);
-
             this.status = 'buying';
             this.currentToken = mintMessage.mint;
 
@@ -388,11 +386,7 @@ class PumpBot {
                 this.status = 'selling';
                 const sellTokenAmount = checkForBuyResult.amount;
 
-                console.log(); // pour cloturer la ligne dynamique
-
-                console.log(`Vente en cours du token ${tokenAddress}. Step 1/3`);
-
-                this.sellToken(sellTokenAmount)
+                this.sellToken(tokenAddress, sellTokenAmount)
                     .then(() => {
                         // Ré-écouter les mint de tokens
                         this.startListeningForTokensMint();
@@ -529,7 +523,8 @@ class PumpBot {
             return;
         }
 
-        console.log(`Achat en cours du token ${this.currentToken}. Step 2/3`);
+
+        console.log(`Achat en cours du token ${this.currentToken}. Step 1/3`);
 
         // TODO
 
@@ -538,6 +533,8 @@ class PumpBot {
         //console.log('buy tx:', tx);
         //const decoded = parsePumpTransaction(tx);
         //fs.writeFileSync(`${__dirname}/../tmp/pump_tx_buy.json`, JSON.stringify(tx, null, 4)); if (1) process.exit();
+
+        console.log(`Achat en cours du token ${this.currentToken}. Step 2/3`);
 
         // 2) envoyer transaction buy
 
@@ -563,23 +560,30 @@ class PumpBot {
     }
 
 
-    private async sellToken(tokenAmount: number) {
+    private async sellToken(tokenAddress: string, tokenAmount: number) {
         if (this.status !== 'selling') {
             console.warn(`sellToken ⚠️ => Processus de vente non initié`);
             return;
         }
 
         if (!this.currentToken) {
-            console.warn(`sellToken ⚠️ => Aucun token actif. Sell annulé`);
+            console.warn(`sellToken ⚠️ => Aucun token actif. Vente annulée`);
+            return;
+        }
+
+        if (tokenAddress !== this.currentToken) {
+            console.warn(`sellToken ⚠️ => Vente du mauvais token. Vente annulée`);
             return;
         }
 
         if (!this.currentPosition) {
-            console.warn(`sellToken ⚠️ => Aucune position ouverte trouvé`);
+            console.warn(`sellToken ⚠️ => Aucune position ouverte. Vente annulée`);
             return;
         }
 
-        console.log(`Vente en cours du token ${this.currentToken}. Step 2/3`);
+
+        console.log(); // pour cloturer la ligne dynamique
+        console.log(`Vente en cours du token ${this.currentToken}. Step 1/3`);
 
         // TODO
 
@@ -587,6 +591,8 @@ class PumpBot {
         const tx = await buildPortalSellTransaction(this.wallet, this.currentToken, tokenAmount);
         //console.log('sell tx:', tx);
         //fs.writeFileSync(`${__dirname}/../tmp/pump_tx_sell.json`, JSON.stringify(tx, null, 4)); if (1) process.exit();
+
+        console.log(`Vente en cours du token ${this.currentToken}. Step 2/3`);
 
         // 2) envoyer transaction sell
 
@@ -615,10 +621,11 @@ class PumpBot {
             this.pumpfunWebsocketApiSubscriptions.unsubscribeToTokens([this.currentToken]);
         }
 
-        this.status = 'idle';
-        this.currentToken = null;
 
         console.log(`Vente en cours du token ${this.currentToken}. Step 3/3`);
+
+        this.status = 'idle';
+        this.currentToken = null;
     }
 
 }
