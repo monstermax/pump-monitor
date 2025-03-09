@@ -216,7 +216,7 @@ class PumpBot {
     private handlePumpCreateTokenMessage(mintMessage: WsCreateTokenResult) {
 
         if (this.status !== 'wait_for_buy') {
-            console.warn(`handlePumpCreateTokenMessage ⚠️ => Etat ${this.status} inattendu. Etat "wait_for_buy" requis. Mint ignoré`);
+            console.warn(`handlePumpCreateTokenMessage ⚠️ => Etat "${this.status}" inattendu. Etat "wait_for_buy" requis. Mint ignoré`);
             return;
         }
 
@@ -252,7 +252,7 @@ class PumpBot {
     private handlePumpTradeTokenMessage(tradeMessage: WsTokenTradeResult) {
 
         if (this.status !== 'wait_for_sell') {
-            console.warn(`handlePumpTradeTokenMessage ⚠️ => Etat ${this.status} inattendu. Etat "wait_for_sell" requis. Impossible de traiter le trade`);
+            //console.warn(`handlePumpTradeTokenMessage ⚠️ => Etat "${this.status}" inattendu. Etat "wait_for_sell" requis. Impossible de traiter le trade`);
             return;
         }
 
@@ -406,7 +406,7 @@ class PumpBot {
     private watchForSell(tokenAddress: string) {
 
         if (this.status !== 'hold') {
-            console.warn(`watchForSell ⚠️ => Etat ${this.status} inattendu. Etat "hold" requis. Surveillance des ventes abandonnée`);
+            console.warn(`watchForSell ⚠️ => Etat "${this.status}" inattendu. Etat "hold" requis. Surveillance des ventes abandonnée`);
             return;
         }
 
