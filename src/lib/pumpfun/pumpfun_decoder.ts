@@ -78,16 +78,25 @@ export function parsePumpTransaction(txData: VersionedTransactionResponse): Pump
         if (txData.meta?.logMessages && hasInitialBuy(txData.meta.logMessages)) {
             const buyResult: TradeInfo = parseBuyInstruction(txData);
             initialBuy = buyResult;
+
+            //fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_create_and_buy.json`, JSON.stringify(txData, null, 4));
+        } else {
+
+            //fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_create.json`, JSON.stringify(txData, null, 4));
         }
 
         const result: PumpTokenInfo = { ...tokenInfo, initialBuy };
         return result;
 
     } else if (instructionType === 'buy') {
+        fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_buy.json`, JSON.stringify(txData, null, 4));
+
         const buyResult: TradeInfo = parseBuyInstruction(txData);
         return buyResult;
 
     } else if (instructionType === 'sell') {
+        fs.writeFileSync(`${__dirname}/../../../tmp/pump_tx_result_sell.json`, JSON.stringify(txData, null, 4));
+
         const sellResult: TradeInfo = parseSellInstruction(txData);
         return sellResult;
     }
