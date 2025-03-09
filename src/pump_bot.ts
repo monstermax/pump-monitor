@@ -165,7 +165,7 @@ class PumpBot {
         if (ws) {
             // unsubscribe old websocket subscriptions
             if (this.pumpfunWebsocketApi && this.pumpfunWebsocketApi.readyState === this.pumpfunWebsocketApi.OPEN && this.pumpfunWebsocketApiSubscriptions) {
-                this.pumpfunWebsocketApiSubscriptions.unsubscribeToNewTokens()
+                this.pumpfunWebsocketApiSubscriptions.unsubscribeNewTokens()
             }
 
             this.pumpfunWebsocketApi = ws;
@@ -332,7 +332,12 @@ class PumpBot {
         const checkForBuyResult = await evaluateTokenForBuy(mintMessage);
 
         if (checkForBuyResult.canBuy) {
-            this.pumpfunWebsocketApiSubscriptions?.unsubscribeToNewTokens();
+
+            if (this.pumpfunWebsocketApiSubscriptions) {
+                this.pumpfunWebsocketApiSubscriptions.unsubscribeNewTokens();
+
+                this.pumpfunWebsocketApiSubscriptions.subscribeToTokens([mintMessage.mint]);
+            }
 
             this.status = 'buying';
             this.currentToken = mintMessage.mint;
@@ -352,6 +357,12 @@ class PumpBot {
 
                     this.status = 'delaying';
                     setTimeout(() => this.status = 'wait_for_buy', 5_000);
+
+                    if (this.pumpfunWebsocketApiSubscriptions) {
+                        this.pumpfunWebsocketApiSubscriptions.unsubscribeToTokens([mintMessage.mint]);
+
+                        this.pumpfunWebsocketApiSubscriptions.subscribeNewTokens();
+                    }
                 })
         }
     }
@@ -435,13 +446,6 @@ class PumpBot {
 
         this.status = 'wait_for_sell';
 
-        const watchedToken = this.currentToken;
-
-
-        if (this.pumpfunWebsocketApiSubscriptions) {
-            this.pumpfunWebsocketApiSubscriptions.subscribeToTokens([watchedToken]);
-        }
-
 
         // TODO: afficher un message dynamique sur la console : buyPrice | buyMarketCap | currentPrice | currentMarketCap | trades | holders | gain | gainVsMaxGain | mintAge | buyAge | lastActivityAge
 
@@ -450,10 +454,13 @@ class PumpBot {
         const buyTime = Date.now(); // À remplacer par l'heure réelle d'achat si disponible
 
         let lastLogTime = 0;
-        let firstPrice: null | string = null;;
+        let firstPrice: null | string = null;
+        const watchedToken = this.currentToken;
+
 
         const logIntervalId = setInterval(() => {
             if (watchedToken !== this.currentToken || this.status !== 'wait_for_sell') {
+                console.warn(`watchForSell ⚠️ => Changement du contexte. Surveillance des ventes stoppée`);
                 clearInterval(logIntervalId);
                 return;
             }
@@ -498,6 +505,8 @@ class PumpBot {
             this.autoSell(tokenAddress);
 
         }, 1000);
+
+        console.log();
     }
 
 
@@ -583,6 +592,8 @@ class PumpBot {
 
 
         console.log(); // pour cloturer la ligne dynamique
+        console.log();
+
         console.log(`Vente en cours du token ${this.currentToken}. Step 1/3`);
 
         // TODO
@@ -695,7 +706,7 @@ class PumpfunWebsocketApiSubscriptions {
     }
 
 
-    unsubscribeToNewTokens() {
+    unsubscribeNewTokens() {
         pumpWsApi.unsubscribeNewToken(this.ws);
         console.log(`📢 Désinscrit des nouveaux tokens`);
     }
