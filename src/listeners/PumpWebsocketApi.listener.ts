@@ -42,10 +42,6 @@ export type WsCreateTokenResult = {
     symbol: string;
     uri: string;
     pool: string;
-
-    // ajouté après reception
-    mintDate?: Date;
-    image?: string;
 }
 
 
@@ -62,9 +58,6 @@ export type WsTokenTradeResult = {
     vSolInBondingCurve: number;
     marketCapSol: number;
     pool: string;
-
-    // ajouté après reception
-    tradeDate?: Date;
 }
 
 

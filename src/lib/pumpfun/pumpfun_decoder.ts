@@ -1,12 +1,14 @@
 
 import fs from 'fs';
 import { PublicKey, VersionedTransactionResponse } from '@solana/web3.js';
+import { WsCreateTokenResult, WsTokenTradeResult } from '../../listeners/PumpWebsocketApi.listener';
 
 
 
 export interface PumpTokenInfo {
     tokenAddress: string;                 // Adresse du token (se terminant par "pump")
     createdAt: Date;                      // Date de création du token
+    lastUpdated: Date;                    // Date de derniere mise à jour du token (dernier trade)
     creatorAddress: string;               // Adresse du créateur
     creatorTokenAccount: string;          // Compte de token associé au créateur
     bondingCurveAddress: string;          // Adresse de la bonding curve
@@ -21,6 +23,7 @@ export interface PumpTokenInfo {
     tokenName?: string;                   // Nom du token (si disponible dans les métadonnées)
     tokenSymbol?: string;                 // Symbole du token (si disponible dans les métadonnées)
     metadataUri?: string;                 // URI des métadonnées
+    marketCapSol?: number;                // MaerrketCap en SOL
     initialBuy?: TradeInfo,
 };
 
@@ -38,6 +41,8 @@ export interface TradeInfo {
     virtualTokenReserves: number;
     realSolReserves: number;
     realTokenReserves: number;
+    marketCapSol: number;
+    timestamp: Date;
 }
 
 
@@ -180,12 +185,13 @@ function parseCreateInstruction(txData: VersionedTransactionResponse): PumpToken
 
     // Calculer le prix avec la formule de la courbe de liaison
     const price = calculatePumpPrice(virtualSolReserves, virtualTokenReserves);
-
+    const marketCapSol = Number(price) * virtualTokenReserves;
 
     // Extraire les informations du token
     const tokenInfo: PumpTokenInfo = {
         tokenAddress,
         createdAt,
+        lastUpdated: createdAt,
         creatorAddress,
         creatorTokenAccount,
         bondingCurveAddress,
@@ -197,6 +203,7 @@ function parseCreateInstruction(txData: VersionedTransactionResponse): PumpToken
         price,
         virtualSolReserves,
         virtualTokenReserves,
+        marketCapSol,
     };
 
     // Extraire les métadonnées à partir des logs si disponibles
@@ -255,9 +262,6 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
     }
 
 
-    const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0;
-
-
     // Extraire les réserves de la bonding curve à partir des logs
     const tradeEventLog = txData.meta?.logMessages?.find(log =>
         log.startsWith('Program data: vdt/007mYe')  // Signature approximative d'un événement trade
@@ -265,10 +269,14 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
 
     const { mint, user, virtualSolReserves, virtualTokenReserves, realSolReserves, realTokenReserves } = parseTradeEvent(tradeEventLog ?? '');
 
+
+    const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0;
+    const marketCapSol = Number(price) * virtualTokenReserves;
+
+
     const traderPostBalanceSol = (buyerIndex >= 0 && txData.meta?.postBalances?.[buyerIndex]) ? txData.meta.postBalances[buyerIndex] / 1e9 : 0;
 
     let buyerPostTokenAmount = 0;
-
 
     if (buyerTokenAccount) {
         // Utiliser directement la valeur post-transaction
@@ -306,6 +314,8 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
         virtualTokenReserves,
         realSolReserves,
         realTokenReserves,
+        marketCapSol,
+        timestamp: new Date((txData.blockTime ?? 0) * 1000),
     };
 
 
@@ -359,15 +369,16 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
     const tokenAmount = sellerPreTokenAmount - sellerPostTokenAmount;
 
 
-    const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0;
-
-
     // Extraire les réserves de la bonding curve à partir des logs
     const tradeEventLog = txData.meta?.logMessages?.find(log =>
         log.startsWith('Program data: vdt/007mYe')  // Signature approximative d'un événement trade
     );
 
     const { mint, user, virtualSolReserves, virtualTokenReserves, realSolReserves, realTokenReserves } = parseTradeEvent(tradeEventLog ?? '');
+
+
+    const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0;
+    const marketCapSol = Number(price) * virtualTokenReserves;
 
     const traderPostBalanceSol = (sellerIndex >= 0 && txData.meta?.postBalances?.[sellerIndex]) ? txData.meta.postBalances[sellerIndex] / 1e9 : 0;
 
@@ -389,6 +400,8 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
         virtualTokenReserves,
         realSolReserves,
         realTokenReserves,
+        marketCapSol,
+        timestamp: new Date((txData.blockTime ?? 0) * 1000),
     };
 
 

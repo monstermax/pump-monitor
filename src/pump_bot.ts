@@ -22,6 +22,14 @@ import type { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './l
 
 type Status = 'idle' | 'wait_for_buy' | 'buying' | 'hold' | 'wait_for_sell' | 'selling' | 'delaying';
 
+
+type SelectedToken = {
+    tokenAddress: string,
+    mintMessage: WsCreateTokenResult,
+    tradesMessages: WsTokenTradeResult[],
+    holders: Map<string, number>;
+};
+
 type Position = {
     tokenAddress: string,
     buySolAmount: number,
@@ -29,8 +37,6 @@ type Position = {
     tokenAmount: number, // holding // string ?
     sellPrice?: string,
     sellSolAmount?: number,
-    //mintMessage: WsCreateTokenResult,
-    tradeMessages: WsTokenTradeResult[],
 }
 
 
@@ -81,6 +87,18 @@ type FastListenerBalanceUpdatedInput = {
 }
 
 
+type BotSettings = {
+    minSolInWallet?: number;
+    defaultBuyAmount?: number;
+    minBuyAmount?: number;
+    maxBuyAmount?: number;
+    scoreMinForBuy?: number;
+    scoreMinForSell?: number;
+    stopLimit?: number;
+    trailingStop?: number;
+}
+
+
 /* ######################################################### */
 
 
@@ -89,6 +107,16 @@ const positionsHistory: Position[] = [];
 const fastListenerMints = new Map<string, FastListenerCreateTokenInput>;
 const fastListenerTrades = new Map<string, FastListenerTradeInput>;
 
+const botSettings: BotSettings = {
+    minSolInWallet: 0.1,
+    defaultBuyAmount: 0.01, // 1.5 $
+    minBuyAmount: 0.01,     // 1.5 $
+    maxBuyAmount: 0.1,      //  15 $
+    scoreMinForBuy: 60,
+    scoreMinForSell: 60,
+    stopLimit: 20,    // 20% => si on est en perte de plus de 20%
+    trailingStop: 80, // 80% => si le prix est plus bas que 80% du max qu'on a connu
+}
 
 /* ######################################################### */
 
@@ -96,7 +124,7 @@ const fastListenerTrades = new Map<string, FastListenerTradeInput>;
 async function main() {
 
     const wallet = Keypair.generate();
-    const bot = new PumpBot(wallet);
+    const bot = new PumpBot(wallet, botSettings);
 
 
     if (true) {
@@ -142,18 +170,21 @@ async function main() {
 class PumpBot {
     private status: Status = 'idle';
     private wallet: Keypair;
+    private settings: BotSettings | undefined;
 
     private pumpfunWebsocketApi: WebSocket | null = null;
     private pumpfunWebsocketApiSubscriptions: PumpfunWebsocketApiSubscriptions | null = null;
     private connection: Connection | null = null;
-    private currentToken: string | null = null;
+    private currentToken: SelectedToken | null = null;
     private currentPosition: Position | null = null;
     private tokenInfos: PumpTokenInfo | null = null;
+    private lastTradeSlot: number | null = null;
 
 
-    constructor(wallet: Keypair) {
+    constructor(wallet: Keypair, botSettings?: BotSettings) {
         this.connection = new Connection(appConfig.solana.rpc.chainstack, { commitment: 'confirmed' });
         this.wallet = wallet;
+        this.settings = botSettings;
     }
 
 
@@ -236,6 +267,9 @@ class PumpBot {
 
                         if (!this.currentPosition) {
                             this.autoBuy(mintMessage, tokenInfos);
+
+                        } else {
+                            console.warn(`handlePumpCreateTokenMessage ⚠️ => Transaction inattendue. Une position est déjà ouverte. Transaction ignorée`);
                         }
                     }
                 })
@@ -267,14 +301,27 @@ class PumpBot {
             return;
         }
 
-        if (tradeMessage.mint !== this.currentToken) {
-            console.warn(`handlePumpTradeTokenMessage ⚠️ => Trade du token ${tradeMessage.mint} inattendu. (token actif = ${this.currentToken}). Trade ignoré`);
+        if (tradeMessage.mint !== this.currentToken.tokenAddress) {
+            console.warn(`handlePumpTradeTokenMessage ⚠️ => Trade du token ${tradeMessage.mint} inattendu. (token actif = ${this.currentToken.tokenAddress}). Trade ignoré`);
             return;
         }
 
         //console.log('handlePumpTradeTokenMessage', tradeMessage);
 
-        this.currentPosition.tradeMessages.push(tradeMessage);
+        this.currentToken.tradesMessages.push(tradeMessage);
+
+        // mise à jour des balances des holders
+        const tokenAmountDiff = tradeMessage.tokenAmount * ((tradeMessage.txType === 'buy') ? 1 : -1);
+        const holderTokenAmount = this.currentToken.holders.get(tradeMessage.traderPublicKey) || 0;
+        this.currentToken.holders.set(tradeMessage.traderPublicKey, holderTokenAmount + tokenAmountDiff);
+        if (holderTokenAmount + tokenAmountDiff === 0) this.currentToken.holders.delete(tradeMessage.traderPublicKey);
+
+        this.tokenInfos.price = (tradeMessage.vSolInBondingCurve / tradeMessage.vTokensInBondingCurve).toFixed(10);
+        this.tokenInfos.virtualSolReserves = tradeMessage.vSolInBondingCurve;
+        this.tokenInfos.virtualTokenReserves = tradeMessage.vTokensInBondingCurve;
+        this.tokenInfos.lastUpdated = new Date; // tradeMessage.timestamp;
+        this.tokenInfos.marketCapSol = tradeMessage.marketCapSol;
+
 
         this.autoSell(this.tokenInfos);
     }
@@ -330,21 +377,37 @@ class PumpBot {
             return;
         }
 
-        const checkForBuyResult = await evaluateTokenForBuy(mintMessage, tokenInfos);
+        // TODO: checker la balance SOL on-chain
+        const maxSolAmount = 0; // TODO: balanceSol - (this.settings?.minSolInWallet ?? 0.01);
+
+        const checkForBuyResult = await this.evaluateTokenForBuy(mintMessage, tokenInfos, maxSolAmount);
 
         if (checkForBuyResult.canBuy) {
+            console.log(`autoBuy 📢 => Recommandation d'achat':`, checkForBuyResult);
 
             if (this.pumpfunWebsocketApiSubscriptions) {
                 this.pumpfunWebsocketApiSubscriptions.unsubscribeNewTokens();
 
                 this.pumpfunWebsocketApiSubscriptions.subscribeToTokens([mintMessage.mint]);
+
+            } else {
+                console.warn(`autoBuy ⚠️ => Souscriptions websocket non disponibles. Achat annulé`);
+                return;
             }
 
+
+            // TODO: checker la balance SOL on-chain
+
             this.status = 'buying';
-            this.currentToken = mintMessage.mint;
+            this.currentToken = { tokenAddress: mintMessage.mint, mintMessage, tradesMessages: [], holders: new Map };
             this.tokenInfos = tokenInfos;
 
-            const buySolAmount = checkForBuyResult.amount;
+            const buySolAmount = checkForBuyResult.amount; // TODO: Math.min(balanceSol, checkForBuyResult.amount)
+
+            if (buySolAmount < (this.settings?.minSolInWallet ?? 0.01)) {
+                console.warn(`autoBuy ⚠️ => Montant disponible inférieur à la somme demandée. Achat annulé`);
+                return;
+            }
 
             this.buyToken(tokenInfos, buySolAmount)
                 .then(() => {
@@ -386,23 +449,25 @@ class PumpBot {
             return;
         }
 
-        if (tokenInfos.tokenAddress !== this.currentToken) {
-            console.warn(`autoSell ⚠️ => Trade du token ${tokenInfos.tokenAddress} inattendu. (token actif = ${this.currentToken}). Vente annulée`);
+        if (tokenInfos.tokenAddress !== this.currentToken.tokenAddress) {
+            console.warn(`autoSell ⚠️ => Trade du token ${tokenInfos.tokenAddress} inattendu. (token actif = ${this.currentToken.tokenAddress}). Vente annulée`);
             return;
         }
 
 
         if (this.currentPosition) {
-            const checkForBuyResult = await evaluateTokenForSell(this.currentPosition, tokenInfos);
+            const checkForSellResult = await this.evaluateTokenForSell(this.currentToken, this.currentPosition, tokenInfos);
 
-            if (checkForBuyResult.canSell) {
+            if (checkForSellResult.canSell) {
+                console.log(`autoSell => 📢 Recommandation de vente:`, checkForSellResult);
+
                 this.status = 'selling';
-                const sellTokenAmount = checkForBuyResult.amount;
+                const sellTokenAmount = checkForSellResult.amount;
 
                 this.sellToken(tokenInfos.tokenAddress, sellTokenAmount)
                     .then(() => {
                         // Ré-écouter les mint de tokens
-                        this.startListeningForTokensMint();
+                        //this.startListeningForTokensMint(); // désactivé pour debug
                     })
                     .catch((err: any) => {
                         console.warn(`❌ Vente échouée. ${err.message}`);
@@ -428,7 +493,7 @@ class PumpBot {
             return;
         }
 
-        if (tokenInfos.tokenAddress !== this.currentToken) {
+        if (tokenInfos.tokenAddress !== this.currentToken.tokenAddress) {
             console.warn(`watchForSell ⚠️ => Token inattendu. Surveillance des ventes abandonnée`);
             return;
         }
@@ -439,12 +504,9 @@ class PumpBot {
         }
 
 
-        console.log(`Mise en attente d'opportunité de vente du token ${this.currentToken}`);
+        console.log(`Mise en attente d'opportunité de vente du token ${this.currentToken.tokenAddress}`);
 
         this.status = 'wait_for_sell';
-
-
-        // TODO: afficher un message dynamique sur la console : buyPrice | buyMarketCap | currentPrice | currentMarketCap | trades | holders | gain | gainVsMaxGain | mintAge | buyAge | lastActivityAge
 
 
         const mintTime = tokenInfos.createdAt;
@@ -452,11 +514,11 @@ class PumpBot {
 
         let lastLogTime = 0;
         let firstPrice: null | string = null;
-        const watchedToken = this.currentToken;
+        const watchedTokenAddress = this.currentToken.tokenAddress;
 
 
         const logIntervalId = setInterval(() => {
-            if (watchedToken !== this.currentToken || this.status !== 'wait_for_sell') {
+            if (watchedTokenAddress !== this.currentToken?.tokenAddress || this.status !== 'wait_for_sell') {
                 console.warn(`watchForSell ⚠️ => Changement du contexte. Surveillance des ventes stoppée`);
                 clearInterval(logIntervalId);
                 return;
@@ -466,9 +528,9 @@ class PumpBot {
             lastLogTime = Date.now();
 
 
-            const lastTrade = this.currentPosition?.tradeMessages[this.currentPosition.tradeMessages.length - 1];
+            const lastTrade = this.currentToken?.tradesMessages[this.currentToken.tradesMessages.length - 1];
             const currentPrice = lastTrade ? (lastTrade.vSolInBondingCurve / lastTrade.vTokensInBondingCurve).toFixed(10) : '0.0';
-            //const currentPrice = currentPosition?.tradeMessages[currentPosition.tradeMessages.length - 1]?.price || '0';
+            //const currentPrice = currentPosition?.tradesMessages[currentPosition.tradesMessages.length - 1]?.price || '0';
             firstPrice = firstPrice ?? currentPrice;
 
             const buyPrice = firstPrice; //currentPosition?.buyPrice || '0';
@@ -477,12 +539,13 @@ class PumpBot {
             const mintAge = Math.round((Date.now() - mintTime.getTime()) / 1000);
             const buyAge = Math.round((Date.now() - buyTime) / 1000);
 
-            const lastActivityAge = this.currentPosition?.tradeMessages.length
-                ? Math.round((Date.now() - mintTime.getTime()) / 1000)
-                : 0;
+            //const lastActivityAge = this.currentToken?.tradesMessages.length
+            //    ? Math.round((Date.now() - mintTime.getTime()) / 1000)
+            //    : 0;
+            const lastActivityAge = Date.now() - tokenInfos.lastUpdated.getTime();
 
             const infos = [
-                `${watchedToken.slice(0, 8)}...,`,
+                `${watchedTokenAddress.slice(0, 8)}...,`,
                 `Buy: ${buyPrice} SOL,`,
                 `Amount: ${tokenAmount.toFixed(0)},`,
                 `Price: ${currentPrice} SOL,`,
@@ -492,8 +555,10 @@ class PumpBot {
                 `Last-age: ${lastActivityAge}s,`,
                 `Holders: -1,`,
                 //`Dev: -1 SOL (-1%),`,
-                `Trades: ${this.currentPosition?.tradeMessages.length || 0}`,
+                `Trades: ${this.currentToken?.tradesMessages.length || 0}`,
             ]
+
+            // afficher un message dynamique sur la console : buyPrice | buyMarketCap | currentPrice | currentMarketCap | trades | holders | gain | gainVsMaxGain | mintAge | buyAge | lastActivityAge
 
             process.stdout.write(`\r$${infos.join(' | ')}`);
 
@@ -519,7 +584,7 @@ class PumpBot {
             return;
         }
 
-        if (tokenInfos.tokenAddress !== this.currentToken) {
+        if (tokenInfos.tokenAddress !== this.currentToken.tokenAddress) {
             console.warn(`buyToken ⚠️ => Achat sur le mauvais token. Achat annulé`);
             return;
         }
@@ -529,27 +594,27 @@ class PumpBot {
             return;
         }
 
-        if (! this.connection) {
+        if (!this.connection) {
             console.warn(`buyToken ⚠️ => Aucune connexion solana/web3 ouverte. Achat annulé`);
             return;
         }
 
 
-        console.log(`Achat en cours du token ${this.currentToken}. Step 1/3`);
+        console.log(`${now()} Achat en cours du token ${this.currentToken.tokenAddress}. Step 1/3`);
 
         // TODO
 
         // 1) créer transaction buy
-        const tx = await buildPortalBuyTransaction(this.wallet.publicKey, this.currentToken, solAmount);
+        const tx = await buildPortalBuyTransaction(this.wallet.publicKey, this.currentToken.tokenAddress, solAmount);
         //console.log('buy tx:', tx);
 
-        console.log(`Achat en cours du token ${this.currentToken}. Step 2/3`);
+        console.log(`${now()} Achat en cours du token ${this.currentToken.tokenAddress}. Step 2/3`);
 
         // 2) envoyer transaction buy
         //const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
         const txResult: TransactionResult = { success: true, signature: '37TptP3nTLXMrm5QshwRdUZnh3eWi2U99KiifUm3dAzhCNKyxjAG62kYM6Gw7RXPkq2JJvGRNbFroJuZG98WDHUN' }; // DEBUG
 
-        if (! txResult.success || !txResult.signature) {
+        if (!txResult.success || !txResult.signature) {
             /*
             console.warn(`Erreur pendant l'achat`);
 
@@ -576,16 +641,15 @@ class PumpBot {
 
 
         this.currentPosition = {
-            tokenAddress: this.currentToken,
+            tokenAddress: this.currentToken.tokenAddress,
             buyPrice: pumpResult.price,
             buySolAmount: pumpResult.solAmount,
             tokenAmount: pumpResult.tokenAmount,
-            tradeMessages: [], // TODO: ajouter les trades existants + le miens
         }
 
         this.status = 'hold';
 
-        console.log(`Achat en cours du token ${this.currentToken}. Step 3/3`);
+        console.log(`${now()} Achat en cours du token ${this.currentToken.tokenAddress}. Step 3/3`);
     }
 
 
@@ -600,7 +664,7 @@ class PumpBot {
             return;
         }
 
-        if (tokenAddress !== this.currentToken) {
+        if (tokenAddress !== this.currentToken.tokenAddress) {
             console.warn(`sellToken ⚠️ => Vente du mauvais token. Vente annulée`);
             return;
         }
@@ -610,7 +674,7 @@ class PumpBot {
             return;
         }
 
-        if (! this.connection) {
+        if (!this.connection) {
             console.warn(`buyToken ⚠️ => Aucune connexion solana/web3 ouverte. Achat annulé`);
             return;
         }
@@ -619,21 +683,21 @@ class PumpBot {
         console.log(); // pour cloturer la ligne dynamique
         console.log();
 
-        console.log(`Vente en cours du token ${this.currentToken}. Step 1/3`);
+        console.log(`${now()} Vente en cours du token ${this.currentToken.tokenAddress}. Step 1/3`);
 
         // TODO
 
         // 1) créer transaction sell
-        const tx = await buildPortalSellTransaction(this.wallet.publicKey, this.currentToken, tokenAmount);
+        const tx = await buildPortalSellTransaction(this.wallet.publicKey, this.currentToken.tokenAddress, tokenAmount);
         //console.log('sell tx:', tx);
 
-        console.log(`Vente en cours du token ${this.currentToken}. Step 2/3`);
+        console.log(`${now()} Vente en cours du token ${this.currentToken.tokenAddress}. Step 2/3`);
 
         // 2) envoyer transaction sell
         //const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
         const txResult: TransactionResult = { success: true, signature: '5jpctgtMZuHEMtbD7VdB5MMzJwCnWgM7191M7zpr4RxehP6mNHeYDRYwswEWUxyukZqvSi2TTYn24TiNVFm2PYUH' }; // DEBUG
 
-        if (! txResult.success || !txResult.signature) {
+        if (!txResult.success || !txResult.signature) {
             /*
             console.warn(`Erreur pendant la vente`);
 
@@ -673,45 +737,43 @@ class PumpBot {
         this.currentPosition = null;
 
         if (this.pumpfunWebsocketApiSubscriptions) {
-            this.pumpfunWebsocketApiSubscriptions.unsubscribeToTokens([this.currentToken]);
+            this.pumpfunWebsocketApiSubscriptions.unsubscribeToTokens([this.currentToken.tokenAddress]);
         }
 
 
-        console.log(`Vente en cours du token ${this.currentToken}. Step 3/3`);
+        console.log(`${now()} Vente en cours du token ${this.currentToken.tokenAddress}. Step 3/3`);
 
         this.status = 'idle';
         this.currentToken = null;
     }
 
-}
 
 
+    private async evaluateTokenForBuy(mintMessage: WsCreateTokenResult, tokenInfos: PumpTokenInfo, maxSolAmount: number): Promise<{ canBuy: boolean, amount: number, reason: string }> {
+        if (!mintMessage) return { canBuy: false, amount: 0, reason: `Message de mint manquant` };
+        if (!tokenInfos) return { canBuy: false, amount: 0, reason: `Infos du token manquantes` };
 
-async function evaluateTokenForBuy(mintMessage: WsCreateTokenResult, tokenInfos: PumpTokenInfo): Promise<{ canBuy: boolean, amount: number, reason: string }> {
-    if (!mintMessage) return { canBuy: false, amount: 0, reason: `Message de mint manquant` };
-    if (!mintMessage.mintDate) return { canBuy: false, amount: 0, reason: `Date de mint manquante` };
+        const tokenAge = Date.now() - tokenInfos.createdAt.getTime();
+        console.log(`👉 Age du token: ${tokenAge} ms`);
+        console.log();
 
-    const tokenAge = Date.now() - tokenInfos.createdAt.getTime();
-    console.log(`👉 Age du token: ${tokenAge} ms`);
-    console.log();
+        const devBuySolAmount = tokenInfos.initialBuy?.solAmount ?? 0;
+        const devBuyTokenAmount = tokenInfos.initialBuy?.tokenAmount ?? 0;
+        const devBuyTokenPercentage = tokenInfos.initialBuy?.traderPostPercentToken ?? 0;
 
-    const devBuySolAmount = tokenInfos.initialBuy?.solAmount ?? 0;
-    const devBuyTokenAmount = tokenInfos.initialBuy?.tokenAmount ?? 0;
-    const devBuyTokenPercentage = tokenInfos.initialBuy?.traderPostPercentToken ?? 0;
+        // vérifier si les conditions d'achat sont remplies (age du mint, solAmount du dev, percentage du dev, nom & symbol, ...)
 
-    // TODO: vérifier si les conditions d'achat sont remplies (age du mint, solAmount du dev, percentage du dev, nom & symbol, ...)
-
-    const ageScore = tokenAge <= 1
+        const ageScore = tokenAge <= 1_000
             ? 80
-            : tokenAge <= 2
+            : tokenAge <= 2_000
                 ? 60
-                : tokenAge <= 3
+                : tokenAge <= 3_000
                     ? 50
-                    : tokenAge <= 5
+                    : tokenAge <= 5_000
                         ? 40
                         : 20;
 
-    let buySolScore = devBuySolAmount <= 0.1
+        let buySolScore = devBuySolAmount <= 0.1
             ? 80
             : devBuySolAmount <= 0.5
                 ? 60
@@ -719,7 +781,7 @@ async function evaluateTokenForBuy(mintMessage: WsCreateTokenResult, tokenInfos:
                     ? 40
                     : 20;
 
-    let buyTokenPercentage = devBuyTokenPercentage <= 1
+        let buyTokenPercentageScore = devBuyTokenPercentage <= 1
             ? 80
             : devBuyTokenPercentage <= 2
                 ? 60
@@ -728,47 +790,119 @@ async function evaluateTokenForBuy(mintMessage: WsCreateTokenResult, tokenInfos:
                     : 20;
 
 
-    // Calculer le score global avec pondérations
-    const weightedScore = [
-        [ageScore, 0.40],
-        [buySolScore, 0.30],
-        [buyTokenPercentage, 0.30],
-    ];
+        // Calculer le score global avec pondérations
+        const weightedScore = [
+            [ageScore, 0.40],
+            [buySolScore, 0.30],
+            [buyTokenPercentageScore, 0.30],
+        ];
 
-    // Arrondir le score
-    const weightTotals = weightedScore.reduce((p, c) => p + c[1], 0);
-    const scoreTotals = weightedScore.reduce((p, c) => p + c[0] * c[1], 0);
-    const finalScore = Math.round(scoreTotals / weightTotals);
+        // Arrondir le score
+        const weightTotals = weightedScore.reduce((p, c) => p + c[1], 0);
+        const scoreTotals = weightedScore.reduce((p, c) => p + c[0] * c[1], 0);
+        const finalScore = Math.round(scoreTotals / weightTotals);
 
-    console.log('weightedScore:', weightedScore)
-    console.log('finalScore:', finalScore)
+        console.log(`${now()} evaluateTokenForBuy => weightedScore:`, weightedScore, '=>', finalScore)
 
-    if (finalScore >= 60) {
-        return { canBuy: true, amount: 0.1, reason: `Conditions d'achat OK` }
+        const scoreNormalized = 100 * (finalScore - (this.settings?.scoreMinForBuy ?? 60)) / (100 - (this.settings?.scoreMinForBuy ?? 60));
 
-    } else {
-        return { canBuy: false, amount: 0, reason: `Conditions d'achat non satisfaites` }
+        if (finalScore >= (this.settings?.scoreMinForBuy ?? 60)) {
+            const defaultAmount = this.settings?.defaultBuyAmount ?? 0.01;
+            const minAmount = Math.max(defaultAmount * 0.5, this.settings?.minBuyAmount ?? defaultAmount * 0.5);
+            const maxAmount = Math.min(defaultAmount * 1.5, this.settings?.maxBuyAmount ?? defaultAmount * 1.5);
+            const [min, max] = [minAmount, Math.min(maxAmount, maxSolAmount)];
+            const amount = min + scoreNormalized * (max - min) / 100;
+
+            if (max <= min || amount <= 0) {
+                return { canBuy: false, amount: 0, reason: `Balance SOL insuffisante` }
+            }
+
+            return { canBuy: true, amount, reason: `Score d'achat satisfaisant` }
+
+        } else {
+            return { canBuy: false, amount: 0, reason: `Conditions d'achat non satisfaites` }
+        }
     }
 
 
-    return { canBuy: false, amount: 0, reason: `Not implemented` }
-}
 
+    private async evaluateTokenForSell(selectedToken: SelectedToken, position: Position, tokenInfos: PumpTokenInfo): Promise<{ canSell: boolean, amount: number, reason: string }> {
+        if (!tokenInfos) return { canSell: false, amount: 0, reason: `Infos du token manquantes` };
 
+        // vérifier si les conditions de ventes sont remplies (age, activité/inactivité, nb trades, nb holders, ventes massives, ... )
 
-async function evaluateTokenForSell(position: Position, tokenInfos: PumpTokenInfo): Promise<{ canSell: boolean, amount: number, reason: string }> {
+        const minPrice = Math.min(...selectedToken.tradesMessages.map(trade => trade.vSolInBondingCurve / trade.vTokensInBondingCurve));
+        const refPrice = Math.max(minPrice, Number(position.buyPrice));
+        const maxPrice = Math.max(...selectedToken.tradesMessages.map(trade => trade.vSolInBondingCurve / trade.vTokensInBondingCurve));
+        const priceOffset = maxPrice - refPrice;
+        const currentPrice = Number(tokenInfos.price);
+        const percentOfAth = priceOffset ? (100 * (currentPrice - refPrice) / Math.abs(priceOffset)) : 0;
 
-    const tokenAge = Date.now() - tokenInfos.createdAt?.getTime()
-    // TODO: vérifier si les conditions de ventes sont remplies (age, activité/inactivité, nb trades, nb holders, ventes massives, ... )
+        const tokenAge = Date.now() - tokenInfos.createdAt?.getTime()
+        const inactivityAge = Date.now() - tokenInfos.lastUpdated?.getTime()
 
-    if (tokenAge < 20_000) {
-        return { canSell: false, amount: 0, reason: `Activité récente` }
+        console.log() // ferme la ligne dynamique
+        console.log(`tokenAge = ${tokenAge} ms | inactivityAge = ${inactivityAge}ms | percentOfAth = ${percentOfAth.toFixed(2)}`)
 
-    } else {
-        return { canSell: true, amount: 0.1, reason: `Aucune activité récente` }
+        const sellScore = percentOfAth < 0
+            ? 90
+            : percentOfAth > 0 && percentOfAth < 40
+                ? 80
+                : percentOfAth > 0 && percentOfAth < 60
+                    ? 70
+                    : percentOfAth > 0 && percentOfAth < 80
+                        ? 40
+                        : 20
+
+        const inactivityScore = inactivityAge <= 3_000
+            ? 75
+            : inactivityAge <= 5_000
+                ? 60
+                : inactivityAge <= 10_000
+                    ? 50
+                    : inactivityAge <= 30_000
+                        ? 40
+                        : 30;
+
+        const ageScore = tokenAge <= 10_000
+            ? 70
+            : tokenAge <= 30_000
+                ? 60
+                : tokenAge <= 60_000
+                    ? 50
+                    : tokenAge <= 120_000
+                        ? 40
+                        : 30;
+
+        const weightedScore = [
+            [sellScore, 0.40],
+            [inactivityScore, 0.30],
+            [ageScore, 0.30],
+        ];
+
+        // Arrondir le score
+        const weightTotals = weightedScore.reduce((p, c) => p + c[1], 0);
+        const scoreTotals = weightedScore.reduce((p, c) => p + c[0] * c[1], 0);
+        const finalScore = Math.round(scoreTotals / weightTotals);
+
+        console.log(); // ferme la ligne dynamique
+        console.log(`${now()} evaluateTokenForSell => weightedScore:`, weightedScore, '=>', finalScore)
+
+        if (finalScore >= (this.settings?.scoreMinForSell ?? 60)) {
+            return { canSell: true, amount: position.tokenAmount, reason: `Score de ventes satisfaisant` }
+
+        } else if (percentOfAth < -(this.settings?.stopLimit ?? 20)) {
+            return { canSell: true, amount: position.tokenAmount, reason: `Stop Limit` }; // TODO: calcul a faire avec les PNL plutot que percentOfAth
+
+        } else if (percentOfAth > 0 && percentOfAth < (this.settings?.trailingStop ?? 80)) {
+            return { canSell: true, amount: position.tokenAmount, reason: `Trailing Stop` }
+
+        } else {
+            return { canSell: false, amount: 0, reason: `Condition de ventes non satisfaites` }
+        }
     }
 
-    return { canSell: false, amount: 0, reason: `Not implemented` }
+
 }
 
 
@@ -791,25 +925,25 @@ class PumpfunWebsocketApiSubscriptions {
 
     subscribeNewTokens() {
         pumpWsApi.subscribeNewToken(this.ws);
-        console.log(`📢 Inscrit aux nouveaux tokens`);
+        console.log(`${now()} 📢 Inscrit aux nouveaux tokens`);
     }
 
 
     unsubscribeNewTokens() {
         pumpWsApi.unsubscribeNewToken(this.ws);
-        console.log(`📢 Désinscrit des nouveaux tokens`);
+        console.log(`${now()} 📢 Désinscrit des nouveaux tokens`);
     }
 
 
     subscribeToTokens(tokenAddresses: string[]) {
         pumpWsApi.subscribeTokenTrade(this.ws, tokenAddresses);
-        console.log(`📢 Inscrit aux tokens ${tokenAddresses.join(' | ')}`);
+        console.log(`${now()} 📢 Inscrit aux tokens ${tokenAddresses.join(' | ')}`);
     }
 
 
     unsubscribeToTokens(tokenAddresses: string[]) {
         pumpWsApi.unsubscribeTokenTrade(this.ws, tokenAddresses);
-        console.log(`📢 Désinscrit des tokens ${tokenAddresses.join(' | ')}`);
+        console.log(`${now()} 📢 Désinscrit des tokens ${tokenAddresses.join(' | ')}`);
     }
 
 }
@@ -845,11 +979,11 @@ async function retrieveTransactionWithRpc(connection: Connection | null, signatu
     });
 
     //const onRetry = (attempt: number, elapsedMs: number, retryIntervalMs: number) => console.log(`retrieveTransactionWithRpc => ⚠️ Echec de la tentative ${attempt}. Temps total écoulé ${elapsedMs} ms. Nouvelle tentative dans ${retryIntervalMs} ms`);
-    const onRetry = (attempt: number, elapsedMs: number, retryIntervalMs: number) => void(0);
+    const onRetry = (attempt: number, elapsedMs: number, retryIntervalMs: number) => void (0);
 
     const resultChecker = (result: any) => result !== null;
 
-    const transaction: VersionedTransactionResponse | null = await retryAsync(promise, 150, 2_000, onRetry, resultChecker);
+    const transaction: VersionedTransactionResponse | null = await retryAsync(promise, 200, 2_000, onRetry, resultChecker);
 
     return transaction;
 }
