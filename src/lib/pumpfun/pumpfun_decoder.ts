@@ -13,7 +13,7 @@ export interface PumpTokenInfo {
     bondingCurveTokenAccount: string;     // Compte de token associé à la bonding curve
     totalSupply: string;                  // Supply totale du token
     decimals: number;                     // Nombre de décimales du token
-    bondingCurveTokenBalance: string;     // Quantité de tokens dans la bonding curve
+    bondingCurveTokenBalance: number;     // Quantité de tokens dans la bonding curve
     bondingCurveSolBalance: number;       // Quantité de SOL dans la bonding curve (en SOL)
     price: string;                        // Prix estimé du token
     virtualSolReserves?: number;          // Réserves virtuelles en SOL (lamports)
@@ -155,9 +155,9 @@ function parseCreateInstruction(txData: VersionedTransactionResponse): PumpToken
         accounts[3] || '';
 
     const decimals = txData.meta.postTokenBalances?.[0]?.uiTokenAmount?.decimals || 0;
-    const bondingCurveTokenBalance = txData.meta.postTokenBalances?.[0]?.uiTokenAmount?.uiAmountString || '';
-    const creatorTokenBalance = txData.meta.postTokenBalances?.[1]?.uiTokenAmount?.uiAmountString || '';
-    const totalSupply = (Number(bondingCurveTokenBalance ?? 0) + Number(creatorTokenBalance ?? 0)).toString();
+    const bondingCurveTokenBalance = txData.meta.postTokenBalances?.[0]?.uiTokenAmount?.uiAmount || 0;
+    const creatorTokenBalance = txData.meta.postTokenBalances?.[1]?.uiTokenAmount?.uiAmount || 0;
+    const totalSupply = (bondingCurveTokenBalance + creatorTokenBalance).toString();
 
 
     // Calculer la quantité de SOL dans la bonding curve
@@ -251,7 +251,7 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
     }
 
     if (buyerTokenAccount) {
-        tokenAmount = parseFloat(buyerTokenAccount.uiTokenAmount.uiAmountString ?? '0');
+        tokenAmount = buyerTokenAccount.uiTokenAmount.uiAmount ?? 0;
     }
 
 
@@ -272,7 +272,7 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
 
     if (buyerTokenAccount) {
         // Utiliser directement la valeur post-transaction
-        buyerPostTokenAmount = parseFloat(buyerTokenAccount.uiTokenAmount.uiAmountString ?? '0');
+        buyerPostTokenAmount = buyerTokenAccount.uiTokenAmount.uiAmount ?? 0;
 
     } else {
         // Chercher dans toutes les balances post-transaction
@@ -284,7 +284,7 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
         // Additionner toutes les balances du même token si l'acheteur a plusieurs comptes
         if (allBuyerTokenAccounts && allBuyerTokenAccounts.length > 0) {
             buyerPostTokenAmount = allBuyerTokenAccounts.reduce((sum, account) =>
-                sum + parseFloat(account.uiTokenAmount.uiAmountString ?? '0'), 0);
+                sum + (account.uiTokenAmount.uiAmount ?? 0), 0);
         }
     }
 
@@ -351,8 +351,8 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
         );
 
         if (postSellerTokenAccount && sellerTokenAccount) {
-            sellerPreTokenAmount = parseFloat(sellerTokenAccount.uiTokenAmount.uiAmountString ?? '0');
-            sellerPostTokenAmount = parseFloat(postSellerTokenAccount.uiTokenAmount.uiAmountString ?? '0');
+            sellerPreTokenAmount = sellerTokenAccount.uiTokenAmount.uiAmount ?? 0;
+            sellerPostTokenAmount = postSellerTokenAccount.uiTokenAmount.uiAmount ?? 0;
         }
     }
 

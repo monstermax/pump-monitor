@@ -1,19 +1,14 @@
 
 
-import { VersionedTransaction, Connection, Keypair } from '@solana/web3.js';
-import { TransactionResult } from '../../services/Trading.service';
-
-/* ######################################################### */
-
-const skipPreflight = false;
+import { VersionedTransaction, Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { sendSolanaTransaction } from '../solana/transaction';
 
 /* ######################################################### */
 
 
-
-export async function buildPortalBuyTransaction(wallet: Keypair, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
+export async function buildPortalBuyTransaction(walletPubKey: PublicKey, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
     const tradeData = {
-        "publicKey": wallet.publicKey,  // Your wallet public key
+        "publicKey": walletPubKey,  // Your wallet public key
         "action": "buy",                 // "buy" or "sell"
         "mint": tokenAddress,         // contract address of the token you want to trade
         "denominatedInSol": "true",     // "true" if amount is amount of SOL, "false" if amount is number of tokens
@@ -37,7 +32,7 @@ export async function buildPortalBuyTransaction(wallet: Keypair, tokenAddress: s
     if (response.status === 200) { // successfully generated transaction
         const data = await response.arrayBuffer();
         const tx = VersionedTransaction.deserialize(new Uint8Array(data));
-        tx.sign([wallet]);
+        //tx.sign([wallet]);
 
         return tx;
 
@@ -48,9 +43,9 @@ export async function buildPortalBuyTransaction(wallet: Keypair, tokenAddress: s
 }
 
 
-export async function buildPortalSellTransaction(wallet: Keypair, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
+export async function buildPortalSellTransaction(walletPubKey: PublicKey, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
     const tradeData = {
-        "publicKey": wallet.publicKey,  // Your wallet public key
+        "publicKey": walletPubKey,  // Your wallet public key
         "action": "sell",                 // "buy" or "sell"
         "mint": tokenAddress,         // contract address of the token you want to trade
         "denominatedInSol": "false",     // "true" if amount is amount of SOL, "false" if amount is number of tokens
@@ -74,7 +69,7 @@ export async function buildPortalSellTransaction(wallet: Keypair, tokenAddress: 
     if (response.status === 200) { // successfully generated transaction
         const data = await response.arrayBuffer();
         const tx = VersionedTransaction.deserialize(new Uint8Array(data));
-        tx.sign([wallet]);
+        //tx.sign([wallet]);
 
         return tx;
 
@@ -85,46 +80,13 @@ export async function buildPortalSellTransaction(wallet: Keypair, tokenAddress: 
 }
 
 
-
-export async function sendPortalTransaction(connection: Connection, tx: VersionedTransaction) {
-    let success = false;
-    let error = undefined;
-
-    // Envoi de la transaction
-    const signature = await connection.sendTransaction(tx, {
-            skipPreflight,
-            maxRetries: 3, // Autoriser des retries au niveau de l'API
-            preflightCommitment: 'confirmed',
-        })
-        .then((result) => {
-            success = true;
-            return result;
-        })
-        .catch((err: any) => {
-            error = err;
-            //console.warn(`sendPortalTransaction error. ${err.message}`);
-            return undefined;
-        })
-
-    //console.log("Transaction: https://solscan.io/tx/" + signature);
-
-    const result: TransactionResult = {
-        success,
-        signature,
-        error,
-    };
-
-    return result;
-}
-
-
 export async function sendPortalBuyTransaction(connection: Connection, wallet: Keypair, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001) {
 
     // Construction de la transaction
-    const tx: VersionedTransaction = await buildPortalBuyTransaction(wallet, tokenAddress, solAmount, slippage, priorityFee);
+    const tx: VersionedTransaction = await buildPortalBuyTransaction(wallet.publicKey, tokenAddress, solAmount, slippage, priorityFee);
 
     // Envoi de la transaction
-    const result = await sendPortalTransaction(connection, tx);
+    const result = await sendSolanaTransaction(connection, wallet, tx);
 
     return result;
 }
@@ -133,10 +95,10 @@ export async function sendPortalBuyTransaction(connection: Connection, wallet: K
 export async function sendPortalSellTransaction(connection: Connection, wallet: Keypair, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.0001) {
 
     // Construction de la transaction
-    const tx: VersionedTransaction = await buildPortalSellTransaction(wallet, tokenAddress, tokenAmount, slippage, priorityFee);
+    const tx: VersionedTransaction = await buildPortalSellTransaction(wallet.publicKey, tokenAddress, tokenAmount, slippage, priorityFee);
 
     // Envoi de la transaction
-    const result = await sendPortalTransaction(connection, tx);
+    const result = await sendSolanaTransaction(connection, wallet, tx);
 
     return result;
 }

@@ -1,23 +1,23 @@
 // pump_bot.ts
 
-import fs from 'fs';
-import fetch from 'node-fetch';
 import WebSocket from 'ws';
+import { Connection, Keypair, VersionedTransactionResponse } from '@solana/web3.js';
 
 import { appConfig } from "./env";
-import { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './listeners/PumpWebsocketApi.listener';
-import * as pumpWsApi from './lib/pumpfun/pumpfun_websocket_api';
-import { Token } from './models/Token.model';
-import { CreateTokenTxResult, TokenTradeTxResult } from './services/PumpListener.service';
-import { Connection, Keypair, VersionedTransactionResponse } from '@solana/web3.js';
-import { MagicConnection } from './lib/solana/MagicConnection';
 import { sleep } from './lib/utils/time.util';
+import { retryAsync } from './lib/utils/promise.util';
 import { WebsocketHandlers, WsConnection } from './lib/utils/websocket';
 import { asserts } from './lib/utils/asserts';
-import { retryAsync } from './lib/utils/promise.util';
+import * as pumpWsApi from './lib/pumpfun/pumpfun_websocket_api';
 import { parsePumpTransaction, TradeInfo } from './lib/pumpfun/pumpfun_decoder';
-import { buildPortalBuyTransaction, buildPortalSellTransaction, sendPortalBuyTransaction, sendPortalTransaction } from './lib/pumpfun/pumpfun_web_api';
-import { TransactionResult } from './services/Trading.service';
+import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/pumpfun_web_api';
+import { sendSolanaTransaction } from './lib/solana/transaction';
+
+import type { TransactionResult } from './services/Trading.service';
+import type { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './listeners/PumpWebsocketApi.listener';
+
+
+/* ######################################################### */
 
 
 type Status = 'idle' | 'wait_for_buy' | 'buying' | 'hold' | 'wait_for_sell' | 'selling' | 'delaying';
@@ -26,7 +26,7 @@ type Position = {
     tokenAddress: string,
     buySolAmount: number,
     buyPrice: string,
-    tokenAmount: number,
+    tokenAmount: number, // holding // string ?
     sellPrice?: string,
     sellSolAmount?: number,
     mintMessage: WsCreateTokenResult,
@@ -81,17 +81,16 @@ type FastListenerBalanceUpdatedInput = {
 }
 
 
-//let connectionUniq: Connection | null = null;
-//let connectionMagic: MagicConnection | null = null;
+/* ######################################################### */
 
-//let currentStatus: Status = 'idle';
-//let currentToken: string | null = null;
-//let currentPosition: Position | null = null;
 
 const positionsHistory: Position[] = [];
 
 const fastListenerMints = new Map<string, FastListenerCreateTokenInput>;
 const fastListenerTrades = new Map<string, FastListenerTradeInput>;
+
+
+/* ######################################################### */
 
 
 async function main() {
@@ -544,13 +543,13 @@ class PumpBot {
         // TODO
 
         // 1) créer transaction buy
-        const tx = await buildPortalBuyTransaction(this.wallet, this.currentToken, solAmount);
+        const tx = await buildPortalBuyTransaction(this.wallet.publicKey, this.currentToken, solAmount);
         //console.log('buy tx:', tx);
 
         console.log(`Achat en cours du token ${this.currentToken}. Step 2/3`);
 
         // 2) envoyer transaction buy
-        const txResult: TransactionResult = await sendPortalTransaction(this.connection, tx);
+        const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
 
         if (! txResult.success || !txResult.signature) {
             /*
@@ -628,13 +627,13 @@ class PumpBot {
         // TODO
 
         // 1) créer transaction sell
-        const tx = await buildPortalSellTransaction(this.wallet, this.currentToken, tokenAmount);
+        const tx = await buildPortalSellTransaction(this.wallet.publicKey, this.currentToken, tokenAmount);
         //console.log('sell tx:', tx);
 
         console.log(`Vente en cours du token ${this.currentToken}. Step 2/3`);
 
         // 2) envoyer transaction sell
-        const txResult: TransactionResult = await sendPortalTransaction(this.connection, tx);
+        const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
 
         if (! txResult.success || !txResult.signature) {
             /*
