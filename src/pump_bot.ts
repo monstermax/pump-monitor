@@ -112,10 +112,10 @@ const fastListenerMints = new Map<string, FastListenerCreateTokenInput>;
 const fastListenerTrades = new Map<string, FastListenerTradeInput>;
 
 const botSettings: BotSettings = {
-    minSolInWallet: 0.1,
-    defaultBuyAmount: 0.01, // 1.5 $
-    minBuyAmount: 0.01,     // 1.5 $
-    maxBuyAmount: 0.1,      //  15 $
+    minSolInWallet: 0.05,    // 7.5 $
+    defaultBuyAmount: 0.01,  // 1.5 $
+    minBuyAmount: 0.005,     // 0.75 $
+    maxBuyAmount: 0.1,       //  15 $
     scoreMinForBuy: 60,
     scoreMinForSell: 60,
     stopLimit: 20,    // 20% => si on est en perte de plus de 20%
@@ -391,7 +391,9 @@ class PumpBot {
             return;
         }
 
-        const maxSolAmount = (this.solBalance?.amount ?? 0) - (this.settings?.minSolInWallet ?? 0.01);
+        const minSolInWalletDefault = 0.001;
+
+        const maxSolAmount = (this.solBalance?.amount ?? 0) - (this.settings?.minSolInWallet ?? minSolInWalletDefault);
 
         const checkForBuyResult = await this.evaluateTokenForBuy(mintMessage, tokenInfos, maxSolAmount);
 
@@ -414,9 +416,15 @@ class PumpBot {
             this.tokenInfos = tokenInfos;
 
             const buySolAmount = checkForBuyResult.amount; // TODO: Math.min(balanceSol, checkForBuyResult.amount)
+            const minSolInWalletDefault = 0.001;
 
-            if (buySolAmount < (this.settings?.minSolInWallet ?? 0.01)) {
-                console.warn(`autoBuy ⚠️ => Montant disponible inférieur à la somme demandée. Achat annulé`);
+            if (this.settings?.minSolInWallet && buySolAmount > this.settings?.minSolInWallet) {
+                console.warn(`autoBuy ⚠️ => Montant demandé supérieur à la somme disponible. Achat annulé`);
+                return;
+            }
+
+            if (this.settings?.minBuyAmount && buySolAmount < this.settings?.minBuyAmount) {
+                console.warn(`autoBuy ⚠️ => Montant demandé inférieur au minimum autorisé. Achat annulé`);
                 return;
             }
 
@@ -620,9 +628,13 @@ class PumpBot {
 
         console.log(`${now()} Achat en cours du token ${this.currentToken.tokenAddress}. Step 2/3`);
 
+
         // 2) envoyer transaction buy
-        //const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
-        const txResult: TransactionResult = { success: true, signature: '37TptP3nTLXMrm5QshwRdUZnh3eWi2U99KiifUm3dAzhCNKyxjAG62kYM6Gw7RXPkq2JJvGRNbFroJuZG98WDHUN' }; // DEBUG
+        const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
+
+        // test
+        //const txResult: TransactionResult = { success: true, signature: '37TptP3nTLXMrm5QshwRdUZnh3eWi2U99KiifUm3dAzhCNKyxjAG62kYM6Gw7RXPkq2JJvGRNbFroJuZG98WDHUN' }; // DEBUG
+
 
         if (!txResult.success || !txResult.signature) {
             /*
@@ -642,12 +654,20 @@ class PumpBot {
             throw new Error(`Erreur pendant l'achat. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
 
+        console.log("Attente Transaction: https://solscan.io/tx/" + txResult.signature);
+
+
         // 3) attendre et récupérer transaction buy
         const txResponseResult = txResult.results ?? await getTransaction(this.connection, txResult.signature);
+
+        console.log(`✅ Transaction d'achat récupérée`);
+
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
         if (!txResponseResult) throw new Error(`Erreur de décodage de la transaction d'achat`);
         const pumpResult = parsePumpTransaction(txResponseResult) as TradeInfo;
+
+        console.log(`✅ Transaction d'achat décodée`);
 
 
         // Mise à jour des balances
@@ -714,9 +734,13 @@ class PumpBot {
 
         console.log(`${now()} Vente en cours du token ${tokenAddress}. Step 2/3`);
 
+
         // 2) envoyer transaction sell
-        //const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
-        const txResult: TransactionResult = { success: true, signature: '5jpctgtMZuHEMtbD7VdB5MMzJwCnWgM7191M7zpr4RxehP6mNHeYDRYwswEWUxyukZqvSi2TTYn24TiNVFm2PYUH' }; // DEBUG
+        const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
+
+        // test
+        //const txResult: TransactionResult = { success: true, signature: '5jpctgtMZuHEMtbD7VdB5MMzJwCnWgM7191M7zpr4RxehP6mNHeYDRYwswEWUxyukZqvSi2TTYn24TiNVFm2PYUH' }; // DEBUG
+
 
         if (!txResult.success || !txResult.signature) {
             /*
@@ -736,14 +760,23 @@ class PumpBot {
             throw new Error(`Erreur pendant la vente. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
 
+        console.log("Attente Transaction: https://solscan.io/tx/" + txResult.signature);
+
+
         // 3) attendre et récupérer transaction sell
         const txResponseResult = txResult.results ?? await getTransaction(this.connection, txResult.signature);
+
+        console.log(`✅ Transaction de vente récupérée`);
+
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
         if (!txResponseResult) throw new Error(`Erreur de décodage de la transaction de vente`);
         const pumpResult = parsePumpTransaction(txResponseResult) as TradeInfo;
 
+        console.log(`✅ Transaction de vente décodée`);
 
+
+        // Mise à jour de la position
         const positionUpdate: Partial<Position> = {
             sellPrice: pumpResult.price,
             sellSolAmount: pumpResult.solAmount,
@@ -754,6 +787,7 @@ class PumpBot {
         Object.assign(this.currentPosition, positionUpdate);
 
 
+        // Mise à jour des souscriptions websocket
         if (this.pumpfunWebsocketApiSubscriptions) {
             this.pumpfunWebsocketApiSubscriptions.unsubscribeToTokens([tokenAddress]);
         }
