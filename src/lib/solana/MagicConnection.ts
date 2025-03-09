@@ -1,6 +1,6 @@
 // MagicConnection.ts
 
-import { AccountInfo, Blockhash, BlockhashWithExpiryBlockHeight, BlockSignatures, Commitment, ConfirmedBlock, ConfirmedTransaction, ConfirmedTransactionMeta, Connection, ConnectionConfig, FeeCalculator, Finality, GetAccountInfoConfig, GetBalanceConfig, GetLatestBlockhashConfig, GetTransactionConfig, GetVersionedTransactionConfig, Message, ParsedAccountData, ParsedConfirmedTransaction, ParsedTransactionWithMeta, PublicKey, RpcResponseAndContext, SendOptions, SignatureResult, Signer, SimulatedTransactionResponse, SimulateTransactionConfig, TokenAccountsFilter, Transaction, TransactionConfirmationStrategy, TransactionResponse, TransactionSignature, VersionedTransaction, VersionedTransactionResponse } from "@solana/web3.js";
+import { AccountInfo, AddressLookupTableAccount, Blockhash, BlockhashWithExpiryBlockHeight, BlockSignatures, Commitment, ConfirmedBlock, ConfirmedSignatureInfo, ConfirmedTransaction, ConfirmedTransactionMeta, Connection, ConnectionConfig, FeeCalculator, Finality, GetAccountInfoConfig, GetBalanceConfig, GetLatestBlockhashConfig, GetNonceAndContextConfig, GetNonceConfig, GetTransactionConfig, GetVersionedTransactionConfig, Message, NonceAccount, ParsedAccountData, ParsedConfirmedTransaction, ParsedTransactionWithMeta, PublicKey, RpcResponseAndContext, SendOptions, SignatureResult, SignaturesForAddressOptions, Signer, SimulatedTransactionResponse, SimulateTransactionConfig, TokenAccountsFilter, Transaction, TransactionConfirmationStrategy, TransactionResponse, TransactionSignature, VersionedTransaction, VersionedTransactionResponse } from "@solana/web3.js";
 
 import { appConfig } from "../../env";
 import { sleep } from "../utils/time.util";
@@ -169,7 +169,23 @@ export class MagicConnection extends Connection {
     }
 
 
+    getSignaturesForAddress(address: PublicKey, options?: SignaturesForAddressOptions, commitment?: Finality): Promise<Array<ConfirmedSignatureInfo>> {
+        return MagicConnectionMethodWrapper(this, 'getSignaturesForAddress', address, options);
+    }
 
+
+    getAddressLookupTable(accountKey: PublicKey, config?: GetAccountInfoConfig): Promise<RpcResponseAndContext<AddressLookupTableAccount | null>> {
+        return MagicConnectionMethodWrapper(this, 'getAddressLookupTable', accountKey, config);
+    }
+
+
+    getNonceAndContext(nonceAccount: PublicKey, commitmentOrConfig?: Commitment | GetNonceAndContextConfig): Promise<RpcResponseAndContext<NonceAccount | null>> {
+        return MagicConnectionMethodWrapper(this, 'getNonceAndContext', nonceAccount, commitmentOrConfig);
+    }
+
+    getNonce(nonceAccount: PublicKey, commitmentOrConfig?: Commitment | GetNonceConfig): Promise<NonceAccount | null> {
+        return MagicConnectionMethodWrapper(this, 'getNonce', nonceAccount, commitmentOrConfig);
+    }
 }
 
 
@@ -219,23 +235,33 @@ export async function MagicConnectionMethod<T>(
 
     // Créer une map pour stocker les erreurs par RPC
     const errors = new Map<string, string>();
+    let firstFounder: string | null = null;
 
     // Créer les promesses pour chaque RPC
     const promises = elligiblesRpcs.map(async (rpcUrl) => {
         const connection = new Connection(rpcUrl);
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            if (firstFounder) {
+                throw new Error(`⚠️ Un autre RPC (${firstFounder}) a déjà trouvé le résultat (RPC ${rpcUrl})`);
+            }
+
             try {
-                //console.log(`[RPC ${rpcUrl}] Tentative ${attempt}/${maxRetries} pour récupérer le résultat ${signature}`);
+                //log(`Tentative ${attempt}/${maxRetries} pour récupérer le résultat ${methodName ? `de la méthode "${methodName}"` : ''} (RPC ${rpcUrl})`);
 
                 const result = await executor(connection);
 
+                if (firstFounder) {
+                    throw new Error(`⚠️ Un autre RPC (${firstFounder}) a déjà trouvé le résultat (RPC ${rpcUrl})`);
+                }
+
                 if (result) {
-                    //console.log(`[RPC ${rpcUrl}] Résultat trouvé ${methodName ? `(${methodName})` : ''} ✅`);
+                    //log(`✅ Résultat trouvé ${methodName ? `(${methodName})` : ''} ✅ (RPC ${rpcUrl})`);
+                    firstFounder = rpcUrl;
                     return result;
 
                 } else {
-                    //console.log(`[RPC ${rpcUrl}] Résultat non trouvé (tentative ${attempt}/${maxRetries})`);
+                    //log(`⚠️ Résultat non trouvé (tentative ${attempt}/${maxRetries}) (RPC ${rpcUrl})`);
 
                     // Attendre un peu plus longtemps à chaque tentative
                     if (attempt < maxRetries) {
@@ -244,12 +270,16 @@ export async function MagicConnectionMethod<T>(
                     }
                 }
 
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
+            } catch (err: any) {
+                const errorMessage = err instanceof Error ? err.message : String(err);
                 errors.set(rpcUrl, errorMessage);
-                //console.error(`[RPC ${rpcUrl}] Erreur (tentative ${attempt}/${maxRetries}): ${errorMessage}`);
+                console.error(`Erreur (tentative ${attempt}/${maxRetries}): ${errorMessage} (RPC ${rpcUrl})`);
 
-                if (!maxRetries) throw error;
+                if (!maxRetries) throw err;
+
+                if (firstFounder) {
+                    throw new Error(`⚠️ Un autre RPC (${firstFounder}) a déjà trouvé le résultat (RPC ${rpcUrl})`);
+                }
 
                 // Attendre avant de réessayer
                 if (attempt < maxRetries) {
@@ -260,7 +290,7 @@ export async function MagicConnectionMethod<T>(
         }
 
         // Si toutes les tentatives échouent pour ce RPC, rejeter la promesse
-        throw new Error(`Échec après ${maxRetries} tentatives pour le RPC ${rpcUrl}`);
+        throw new Error(`🚨 Échec après ${maxRetries} tentatives (RPC ${rpcUrl})`);
     });
 
 
@@ -269,7 +299,7 @@ export async function MagicConnectionMethod<T>(
 
     const timeoutPromise = new Promise<T>((_, reject) => {
         timeoutId = setTimeout(() => {
-            console.error(`❌ Timeout global de ${timeout}ms dépassé sur tous les RPCs ${methodName ? `(${methodName})` : ''}`);
+            console.error(`❌ Timeout global de ${timeout}ms dépassé sur les ${elligiblesRpcs.length} RPCs ${methodName ? `(${methodName})` : ''}`);
             reject(new Error(`Timeout global de ${timeout}ms dépassé`));
         }, timeout);
     });
@@ -286,7 +316,7 @@ export async function MagicConnectionMethod<T>(
         if (errors.size > 0) {
             console.error("Résumé des erreurs par RPC:");
             errors.forEach((error, rpc) => {
-                console.error(`- ${rpc}: ${error}`);
+                console.error(`👉 ${rpc}: ${error}`);
             });
         }
 
@@ -334,3 +364,29 @@ if (require.main === module) {
 }
 
 
+
+
+
+function log(message: string) {
+    console.log(`${now()} | ${message}`)
+}
+
+
+function now(date?: Date) {
+    const dateFormatted = getUsDateTime(date);
+    return dateFormatted.replace(' ', ' | ');
+}
+
+
+function getUsDateTime(date?: Date) {
+    if (date === null) return '';
+    date = date ?? new Date;
+    return `${getUsDate(date)} ${date.toLocaleTimeString('fr-FR', { timeStyle: 'medium' })}`;
+}
+
+
+function getUsDate(date?: Date) {
+    if (date === null) return '';
+    date = date ?? new Date;
+    return date.toLocaleDateString('fr-FR', { dateStyle: 'short' }).split('/').reverse().join('-');
+}

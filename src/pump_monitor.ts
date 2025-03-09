@@ -4,7 +4,6 @@ import { PumpWebsocketApi } from "./listeners/PumpWebsocketApi.listener";
 import { Service, ServiceManager } from "./managers/Service.manager";
 import { TokenManager } from "./services/TokenManager.service";
 import { TokenAnalyzer } from "./services/TokenAnalyzer.service";
-import { ServiceAbstract } from "./services/abstract.service";
 import { Database } from "./services/Database.service";
 import { Logger } from "./services/Logger.service";
 import { PriceFeed } from "./services/PriceFeed.service";

@@ -198,7 +198,7 @@ export class PumpListener extends ServiceAbstract {
             website: newTokenData.website ?? '',
             twitter: newTokenData.twitter ?? '',
             telegram: newTokenData.telegram ?? '',
-            createdAt: new Date(),
+            createdAt: new Date(), // TODO: récupérer la date réelle on-chain
             totalSupply,
             marketCapSOL,
             marketCapUSD,

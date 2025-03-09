@@ -2,7 +2,7 @@
 
 import { Commitment, Connection, PublicKey } from "@solana/web3.js";
 import { getPdaMetadataKey } from "@raydium-io/raydium-sdk";
-import { getMetadataAccountDataSerializer} from "@metaplex-foundation/mpl-token-metadata";
+import { getMetadataAccountDataSerializer } from "@metaplex-foundation/mpl-token-metadata";
 
 /* ######################################################### */
 
@@ -50,4 +50,5 @@ export const getTokenMetaData = async (connection: Connection, baseMint: PublicK
         return null;
     }
 }
+
 

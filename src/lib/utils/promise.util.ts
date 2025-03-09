@@ -8,7 +8,8 @@ export async function retryAsync<T>(
     operation: () => Promise<T>,
     retryIntervalMs: number = 2000,
     timeoutMs: number = 60000,
-    onRetry?: (attempt: number, elapsedMs: number) => void
+    onRetry?: (attempt: number, elapsedMs: number, retryIntervalMs: number) => void,
+    resultChecker?: (result: any) => boolean
 ): Promise<T> {
     const startTime = Date.now();
     let attempt = 0;
@@ -17,7 +18,11 @@ export async function retryAsync<T>(
         attempt++;
 
         try {
-            return await operation();
+            return await operation()
+                .then((result: T) => {
+                    if (resultChecker && ! resultChecker(result)) throw new Error(`Résultat non valide`);
+                    return result;
+                });
 
         } catch (err: any) {
             const elapsedMs = Date.now() - startTime;
@@ -29,7 +34,7 @@ export async function retryAsync<T>(
 
             // Notifier de la nouvelle tentative
             if (onRetry) {
-                onRetry(attempt, elapsedMs);
+                onRetry(attempt, elapsedMs, retryIntervalMs);
             }
 
             // Attendre avant de réessayer

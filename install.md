@@ -12,7 +12,10 @@ npm i bs58 @solana/web3.js @solana/buffer-layout @solana/buffer-layout-utils
 npm i -D @types/bs58 
 
 
-npm i @raydium-io/raydium-sdk @metaplex-foundation/mpl-token-metadata
+npm i @raydium-io/raydium-sdk @metaplex-foundation/mpl-token-metadata @metaplex-foundation/umi
+
+npm i node-fetch@2.7.0
+npm i -D @types/node-fetch@2.6.9
 
 npm i @coral-xyz/borsh
 

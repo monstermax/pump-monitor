@@ -38,7 +38,7 @@ export const appConfig: AppConfig = {
         WalletPrivateKey: process.env.WALLET_PRIVATE_KEY || '',
     },
     fastListener: {
-        URL: 'ws://localhost:5715',
+        url: 'ws://localhost:5715',
         pingInterval: 15_000,  // 15 secondes
     },
     websocketApi: {
@@ -106,7 +106,7 @@ export type AppConfig = {
         WalletPrivateKey: string;
     };
     fastListener: {
-        URL: string;
+        url: string;
         pingInterval: number;  // ms
     };
     websocketApi: {

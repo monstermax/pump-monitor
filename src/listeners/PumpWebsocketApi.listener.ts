@@ -28,36 +28,43 @@ export type WsUnsubscribeResult = { message: string };
 
 
 export type WsCreateTokenResult = {
-    signature: string
-    mint: string
-    traderPublicKey: string
-    txType: 'create'
-    initialBuy: number
-    solAmount: number
-    bondingCurveKey: string
-    vTokensInBondingCurve: number
-    vSolInBondingCurve: number
-    marketCapSol: number
-    name: string
-    symbol: string
-    uri: string
-    pool: string
+    signature: string;
+    mint: string;
+    traderPublicKey: string;
+    txType: 'create';
+    initialBuy: number;
+    solAmount: number;
+    bondingCurveKey: string;
+    vTokensInBondingCurve: number;
+    vSolInBondingCurve: number;
+    marketCapSol: number;
+    name: string;
+    symbol: string;
+    uri: string;
+    pool: string;
+
+    // ajouté après reception
+    mintDate?: Date;
+    image?: string;
 }
 
 
 export type WsTokenTradeResult = {
-    signature: string
-    mint: string
-    traderPublicKey: string
-    txType: 'sell' | 'buy'
-    tokenAmount: number
-    solAmount: number
-    newTokenBalance: number
-    bondingCurveKey: string
-    vTokensInBondingCurve: number
-    vSolInBondingCurve: number
-    marketCapSol: number
-    pool: string
+    signature: string;
+    mint: string;
+    traderPublicKey: string;
+    txType: 'sell' | 'buy';
+    tokenAmount: number;
+    solAmount: number;
+    newTokenBalance: number;
+    bondingCurveKey: string;
+    vTokensInBondingCurve: number;
+    vSolInBondingCurve: number;
+    marketCapSol: number;
+    pool: string;
+
+    // ajouté après reception
+    tradeDate?: Date;
 }
 
 

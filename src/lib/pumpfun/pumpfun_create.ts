@@ -1,11 +1,11 @@
 // pumpfun_create.ts
 
-import { Commitment, Connection, Finality, Keypair, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import { Commitment, Connection, Finality, Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { MPL_TOKEN_METADATA_PROGRAM_ID } from "@metaplex-foundation/mpl-token-metadata";
 
 import { PriorityFee, TransactionResult } from "../../services/Trading.service";
-import { calculateWithSlippageBuy, CreateTokenMetadata, FEE_RECIPIENT, METADATA_SEED } from "./pumpfun_create_buy_sell";
+import { calculateWithSlippageBuy, CreateTokenMetadata, FEE_RECIPIENT, getGlobalAccountPubKey, METADATA_SEED, PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
 import { getBuyInstructions } from "./pumpfun_buy";
 import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx } from "./pumpfun_tx";
 import { getGlobalAccount } from "./pumpfun_global_account";
@@ -153,8 +153,64 @@ export function preparePumpFunCreateInstruction(
     tokenProgramId: PublicKey = TOKEN_PROGRAM_ID
 ): TransactionInstruction {
 
-    throw new Error(`preparePumpFunCreateInstruction not implemented`);
 
+    if (1) throw new Error(`preparePumpFunCreateInstruction not implemented`);
+
+
+    const INSTRUCTION_IDENTIFIER = Buffer.from([24, 30, 200, 40, 5, 28, 7, 119]);
+
+    /*
+    const nameBuffer = Buffer.alloc(4);
+    nameBuffer.writeUInt32LE(Buffer.from(name), 0);
+
+    const symbolBuffer = Buffer.alloc(4);
+    symbolBuffer.writeUInt32LE(Buffer.from(symbol), 0);
+
+    const uriBuffer = Buffer.alloc(4);
+    uriBuffer.writeUInt32LE(Buffer.from(uri), 0);
+
+    */
+
+    // Concaténer les données de l'instruction
+    const instructionData = Buffer.concat([
+        INSTRUCTION_IDENTIFIER,
+        //nameBuffer,
+        //symbolBuffer,
+        //uriBuffer,
+    ]);
+
+
+    const globalAccountPubKey = getGlobalAccountPubKey();
+
+    //const globalAccountPubKey = PublicKey.findProgramAddressSync(
+    //    [Buffer.from("global")],
+    //    new PublicKey(PUMPFUN_PROGRAM_ID)
+    //)[0];
+
+    console.log(`🌐 Compte global: ${globalAccountPubKey.toBase58()}`);
+
+
+    // Liste des comptes requis
+    const keys = [
+        { pubkey: globalAccountPubKey, isSigner: false, isWritable: false },
+        { pubkey: feeRecipient, isSigner: false, isWritable: true },
+        { pubkey: mint.publicKey, isSigner: false, isWritable: true },
+        { pubkey: metadataPDA, isSigner: false, isWritable: true },
+        { pubkey: associatedBondingCurve, isSigner: false, isWritable: true },
+        { pubkey: creator, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // Pour les bonding curves
+        { pubkey: tokenProgramId, isSigner: false, isWritable: false },   // Pour les opérations de token de l'utilisateur
+        { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    ];
+
+    console.log(`📑 Liste des comptes préparée avec ${keys.length} comptes`);
+
+    return new TransactionInstruction({
+        keys,
+        programId: new PublicKey(PUMPFUN_PROGRAM_ID), // Adresse du programme Pump.fun
+        data: instructionData
+    });
 }
 
 

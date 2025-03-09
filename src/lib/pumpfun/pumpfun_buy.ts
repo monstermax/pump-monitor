@@ -311,7 +311,7 @@ function preparePumpFunBuyInstruction(
     tokenAmountBuffer.writeBigUInt64LE(amount, 0);
 
     const solAmountBuffer = Buffer.alloc(8);
-    solAmountBuffer.writeBigUInt64LE(solAmount, 0);
+    solAmountBuffer.writeBigUInt64LE(solAmount, 0); // maxSolCost
 
 
     // Concaténer les données de l'instruction
