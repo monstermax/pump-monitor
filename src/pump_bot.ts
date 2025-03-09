@@ -15,8 +15,9 @@ import { sleep } from './lib/utils/time.util';
 import { WebsocketHandlers, WsConnection } from './lib/utils/websocket';
 import { asserts } from './lib/utils/asserts';
 import { retryAsync } from './lib/utils/promise.util';
-import { parsePumpTransaction } from './lib/pumpfun/pumpfun_decoder';
-import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/pumpfun_web_api';
+import { parsePumpTransaction, TradeInfo } from './lib/pumpfun/pumpfun_decoder';
+import { buildPortalBuyTransaction, buildPortalSellTransaction, sendPortalBuyTransaction, sendPortalTransaction } from './lib/pumpfun/pumpfun_web_api';
+import { TransactionResult } from './services/Trading.service';
 
 
 type Status = 'idle' | 'wait_for_buy' | 'buying' | 'hold' | 'wait_for_sell' | 'selling' | 'delaying';
@@ -349,8 +350,8 @@ class PumpBot {
                     // surveiller les opportunités de vente
                     this.watchForSell(mintMessage.mint);
                 })
-                .catch(() => {
-                    console.warn(`❌ Achat échoué`);
+                .catch((err: any) => {
+                    console.warn(`❌ Achat échoué. ${err.message}`);
 
                     this.status = 'idle';
                     this.currentToken = null;
@@ -402,8 +403,8 @@ class PumpBot {
                         // Ré-écouter les mint de tokens
                         this.startListeningForTokensMint();
                     })
-                    .catch(() => {
-                        console.warn(`❌ Vente échouée`);
+                    .catch((err: any) => {
+                        console.warn(`❌ Vente échouée. ${err.message}`);
 
                         this.status = 'delaying';
                         setTimeout(() => this.status = 'wait_for_sell', 5_000);
@@ -465,7 +466,7 @@ class PumpBot {
                 return;
             }
 
-            if (Date.now() - lastLogTime < 5000) return; // Limiter l'affichage à toutes les 5 secondes
+            if (Date.now() - lastLogTime < 1000) return; // Limiter l'affichage à 1 refresh par seconde
             lastLogTime = Date.now();
 
 
@@ -532,6 +533,11 @@ class PumpBot {
             return;
         }
 
+        if (! this.connection) {
+            console.warn(`buyToken ⚠️ => Aucune connexion solana/web3 ouverte. Achat annulé`);
+            return;
+        }
+
 
         console.log(`Achat en cours du token ${this.currentToken}. Step 1/3`);
 
@@ -540,25 +546,41 @@ class PumpBot {
         // 1) créer transaction buy
         const tx = await buildPortalBuyTransaction(this.wallet, this.currentToken, solAmount);
         //console.log('buy tx:', tx);
-        //const decoded = parsePumpTransaction(tx);
-        //fs.writeFileSync(`${__dirname}/../tmp/pump_tx_buy.json`, JSON.stringify(tx, null, 4)); if (1) process.exit();
 
         console.log(`Achat en cours du token ${this.currentToken}. Step 2/3`);
 
         // 2) envoyer transaction buy
+        const txResult: TransactionResult = await sendPortalTransaction(this.connection, tx);
+
+        if (! txResult.success || !txResult.signature) {
+            console.warn(`Erreur pendant l'achat`);
+
+            if (txResult.error) {
+                console.warn(` - message: ${txResult.error.transactionMessage}`);
+
+                txResult.error.transactionLogs.forEach(log => {
+                    console.warn(` - log: ${log}`);
+                })
+
+                //console.log('ERR', txResult.error.transactionError)
+            }
+
+            throw new Error(`Erreur pendant l'achat. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
+        }
 
         // 3) attendre et récupérer transaction buy
-        //const txResult = await getTransaction(this.connection, signature);
+        const txResponseResult = await getTransaction(this.connection, txResult.signature);
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
-        //const transactionResult = parsePumpTransaction(txResult);
+        if (!txResponseResult) throw new Error(`Erreur de décodage de la transaction d'achat`);
+        const pumpResult = parsePumpTransaction(txResponseResult) as TradeInfo;
 
 
         this.currentPosition = {
             tokenAddress: this.currentToken,
-            buyPrice: '0', // TODO
-            buySolAmount: 0, // TODO
-            tokenAmount: 0, // TODO
+            buyPrice: pumpResult.price,
+            buySolAmount: pumpResult.solAmount,
+            tokenAmount: pumpResult.tokenAmount,
             mintMessage,
             tradeMessages: [], // TODO: ajouter les trades existant + le miens
         }
@@ -590,6 +612,11 @@ class PumpBot {
             return;
         }
 
+        if (! this.connection) {
+            console.warn(`buyToken ⚠️ => Aucune connexion solana/web3 ouverte. Achat annulé`);
+            return;
+        }
+
 
         console.log(); // pour cloturer la ligne dynamique
         console.log();
@@ -601,25 +628,41 @@ class PumpBot {
         // 1) créer transaction sell
         const tx = await buildPortalSellTransaction(this.wallet, this.currentToken, tokenAmount);
         //console.log('sell tx:', tx);
-        //fs.writeFileSync(`${__dirname}/../tmp/pump_tx_sell.json`, JSON.stringify(tx, null, 4)); if (1) process.exit();
 
         console.log(`Vente en cours du token ${this.currentToken}. Step 2/3`);
 
         // 2) envoyer transaction sell
+        const txResult: TransactionResult = await sendPortalTransaction(this.connection, tx);
+
+        if (! txResult.success || !txResult.signature) {
+            console.warn(`Erreur pendant la vente`);
+
+            if (txResult.error) {
+                console.warn(` - message: ${txResult.error.transactionMessage}`);
+
+                txResult.error.transactionLogs.forEach(log => {
+                    console.warn(` - log: ${log}`);
+                })
+
+                //console.log('ERR', txResult.error.transactionError)
+            }
+
+            throw new Error(`Erreur pendant la vente. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
+        }
 
         // 3) attendre et récupérer transaction sell
-        //const txResult = await getTransaction(this.connection, signature);
+        const txResponseResult = await getTransaction(this.connection, txResult.signature);
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
-        //const transactionResult = parsePumpTransaction(txResult);
+        if (!txResponseResult) throw new Error(`Erreur de décodage de la transaction de vente`);
+        const pumpResult = parsePumpTransaction(txResponseResult) as TradeInfo;
 
-
-        const sellPrice = "0"; // TODO
-        const solAmount = 0; // TODO
 
         const positionUpdate: Partial<Position> = {
-            sellPrice,
-            sellSolAmount: solAmount,
+            sellPrice: pumpResult.price,
+            sellSolAmount: pumpResult.solAmount,
+            tokenAmount: pumpResult.tokenAmount,
+            // TODO: calcul profit
         }
 
         Object.assign(this.currentPosition, positionUpdate);

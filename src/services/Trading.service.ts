@@ -18,7 +18,7 @@ import { OpportunityAnalysis } from "../analyzers/opportunity-analyzer";
 
 export type TransactionResult = {
     signature?: string;
-    error?: unknown;
+    error?: Error & { transactionError: Error, transactionLogs: string[], transactionMessage: string };
     results?: VersionedTransactionResponse;
     success: boolean;
 };

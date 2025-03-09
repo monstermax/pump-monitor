@@ -10,6 +10,7 @@ const skipPreflight = false;
 /* ######################################################### */
 
 
+
 export async function buildPortalBuyTransaction(wallet: Keypair, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
     const tradeData = {
         "publicKey": wallet.publicKey,  // Your wallet public key
@@ -45,30 +46,6 @@ export async function buildPortalBuyTransaction(wallet: Keypair, tokenAddress: s
         throw new Error(response.statusText)
     }
 }
-
-
-export async function sendPortalBuyTransaction(connection: Connection, wallet: Keypair, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001) {
-
-    // Construction de la transaction
-    const tx: VersionedTransaction = await buildPortalBuyTransaction(wallet, tokenAddress, solAmount, slippage, priorityFee);
-
-    // Envoi de la transaction
-    const signature = await connection.sendTransaction(tx, {
-        skipPreflight,
-        maxRetries: 3, // Autoriser des retries au niveau de l'API
-        preflightCommitment: 'confirmed',
-    });
-
-    //console.log("Transaction: https://solscan.io/tx/" + signature);
-
-    const result: TransactionResult = {
-        success: true,
-        signature,
-    };
-
-    return result;
-}
-
 
 
 export async function buildPortalSellTransaction(wallet: Keypair, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
@@ -109,24 +86,57 @@ export async function buildPortalSellTransaction(wallet: Keypair, tokenAddress: 
 
 
 
+export async function sendPortalTransaction(connection: Connection, tx: VersionedTransaction) {
+    let success = false;
+    let error = undefined;
+
+    // Envoi de la transaction
+    const signature = await connection.sendTransaction(tx, {
+            skipPreflight,
+            maxRetries: 3, // Autoriser des retries au niveau de l'API
+            preflightCommitment: 'confirmed',
+        })
+        .then((result) => {
+            success = true;
+            return result;
+        })
+        .catch((err: any) => {
+            error = err;
+            //console.warn(`sendPortalTransaction error. ${err.message}`);
+            return undefined;
+        })
+
+    //console.log("Transaction: https://solscan.io/tx/" + signature);
+
+    const result: TransactionResult = {
+        success,
+        signature,
+        error,
+    };
+
+    return result;
+}
+
+
+export async function sendPortalBuyTransaction(connection: Connection, wallet: Keypair, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001) {
+
+    // Construction de la transaction
+    const tx: VersionedTransaction = await buildPortalBuyTransaction(wallet, tokenAddress, solAmount, slippage, priorityFee);
+
+    // Envoi de la transaction
+    const result = await sendPortalTransaction(connection, tx);
+
+    return result;
+}
+
+
 export async function sendPortalSellTransaction(connection: Connection, wallet: Keypair, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.0001) {
 
     // Construction de la transaction
     const tx: VersionedTransaction = await buildPortalSellTransaction(wallet, tokenAddress, tokenAmount, slippage, priorityFee);
 
     // Envoi de la transaction
-    const signature = await connection.sendTransaction(tx, {
-        skipPreflight,
-        maxRetries: 3, // Autoriser des retries au niveau de l'API
-        preflightCommitment: 'confirmed',
-    });
-
-    //console.log("Transaction: https://solscan.io/tx/" + signature);
-
-    const result: TransactionResult = {
-        success: true,
-        signature,
-    };
+    const result = await sendPortalTransaction(connection, tx);
 
     return result;
 }
