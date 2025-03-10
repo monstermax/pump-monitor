@@ -135,7 +135,7 @@ const fastListenerMints = new Map<string, FastListenerCreateTokenInput>;
 const fastListenerTrades = new Map<string, FastListenerTradeInput>;
 
 const botSettings: BotSettings = {
-    minSolInWallet: 0.02,
+    minSolInWallet: 0.01,
     defaultBuyAmount: 0.07,
     minBuyAmount: 0.05,
     maxBuyAmount: 0.10,
@@ -938,10 +938,10 @@ class PumpBot {
             log(`🎉 Gain = ${(gain).toFixed(3)} SOL (${(100 * gain / this.currentPosition.buySolCost).toFixed(2)} %)`);
 
         } else if (gain < 0) {
-            log(`💀 Gain = ${(gain).toFixed(3)} SOL`);
+            log(`💀 Gain = ${(gain).toFixed(3)} SOL (${(100 * gain / this.currentPosition.buySolCost).toFixed(2)} %)`);
 
         } else {
-            log(`👉 Gain = ${(gain).toFixed(3)} SOL (${(100 * gain / this.currentPosition.buySolCost).toFixed(2)} %)`);
+            log(`👉 Gain = ${(gain).toFixed(3)} SOL`);
         }
 
 
@@ -1010,11 +1010,11 @@ class PumpBot {
         const ageScore = tokenAge <= 1
             ? 80
             : tokenAge <= 2
-                ? 60
+                ? 50
                 : tokenAge <= 3
-                    ? 50
+                    ? 40
                     : tokenAge <= 5
-                        ? 40
+                        ? 30
                         : 20;
 
         let buySolScore = devBuySolAmount <= 0.1
@@ -1036,7 +1036,7 @@ class PumpBot {
 
         // Calculer le score global avec pondérations
         const weightedScore = [
-            [Math.round(ageScore), 40],
+            [Math.round(ageScore), 50],
             [Math.round(buySolScore), 30],
             [Math.round(buyTokenPercentageScore), 30],
         ];
