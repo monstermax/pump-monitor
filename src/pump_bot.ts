@@ -756,6 +756,7 @@ class PumpBot {
         const checkedTokenBalance = { amount: pumpResult.traderPostBalanceToken, lastUpdated: pumpResult.timestamp };
         //log(`buyToken 📢 => Balance Token mise à jour : ${checkedTokenBalance.amount.toFixed(9)} ${tokenInfos.tokenSymbol}`);
 
+        const preBalance = pumpResult.traderPreBalanceSol;
         this.solBalance = { amount: pumpResult.traderPostBalanceSol, lastUpdated: pumpResult.timestamp };
         //log(`buyToken 📢 => Balance Sol mise à jour : ${this.solBalance.amount.toFixed(9)} SOL`);
 
@@ -765,7 +766,7 @@ class PumpBot {
         // Création de la position
         this.currentPosition = {
             tokenAddress: this.currentToken.tokenAddress,
-            preBalance: this.solBalance.amount,
+            preBalance,
             postBalance: null,
             recommandedSolAmount: solAmount,
             buyPrice: pumpResult.price,
@@ -915,13 +916,15 @@ class PumpBot {
         // Historise la position
         positionsHistory.push(this.currentPosition);
 
-        log(`Vente en cours du token ${tokenAddress} Step 3/3`);
-
 
         // Mise à jour des souscriptions websocket
         if (this.pumpfunWebsocketApiSubscriptions) {
             this.pumpfunWebsocketApiSubscriptions.unsubscribeToTokens([tokenAddress]);
         }
+
+
+        log(`Vente en cours du token ${tokenAddress} Step 3/3`);
+        log(`👉 Gain = ${((this.currentPosition.postBalance ?? 0) - this.currentPosition.preBalance).toFixed(3)} SOL`);
 
 
         this.setStatus('idle');

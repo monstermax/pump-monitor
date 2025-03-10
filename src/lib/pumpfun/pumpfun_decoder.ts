@@ -35,6 +35,7 @@ export interface TradeInfo {
     solAmount: number;
     tokenAmount: number;
     price: string;
+    traderPreBalanceSol: number;
     traderPostBalanceSol: number;
     traderPostBalanceToken: number;
     traderPostPercentToken: number;
@@ -279,6 +280,7 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
 
     const marketCapSol = Number(price) * virtualTokenReserves;
 
+    const traderPreBalanceSol = (buyerIndex >= 0 && txData.meta?.preBalances?.[buyerIndex]) ? txData.meta.preBalances[buyerIndex] / 1e9 : 0;
     const traderPostBalanceSol = (buyerIndex >= 0 && txData.meta?.postBalances?.[buyerIndex]) ? txData.meta.postBalances[buyerIndex] / 1e9 : 0;
 
     let buyerPostTokenAmount = 0;
@@ -291,13 +293,12 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
         // Chercher dans toutes les balances post-transaction
         const allBuyerTokenAccounts = txData.meta?.postTokenBalances?.filter(balance =>
             balance.owner === buyerAddress &&
-            balance.mint === mint // Assurez-vous qu'il s'agit du même token
+            balance.mint === mint
         );
 
         // Additionner toutes les balances du même token si l'acheteur a plusieurs comptes
         if (allBuyerTokenAccounts && allBuyerTokenAccounts.length > 0) {
-            buyerPostTokenAmount = allBuyerTokenAccounts.reduce((sum, account) =>
-                sum + (account.uiTokenAmount.uiAmount ?? 0), 0);
+            buyerPostTokenAmount = allBuyerTokenAccounts.reduce((sum, account) => sum + (account.uiTokenAmount.uiAmount ?? 0), 0);
         }
     }
 
@@ -313,6 +314,7 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
         solAmount,
         tokenAmount,
         price,
+        traderPreBalanceSol,
         traderPostBalanceSol,
         traderPostBalanceToken: buyerPostTokenAmount,
         traderPostPercentToken,
@@ -391,10 +393,11 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
 
     const marketCapSol = Number(price) * virtualTokenReserves;
 
+    const traderPreBalanceSol = (sellerIndex >= 0 && txData.meta?.preBalances?.[sellerIndex]) ? txData.meta.preBalances[sellerIndex] / 1e9 : 0;
     const traderPostBalanceSol = (sellerIndex >= 0 && txData.meta?.postBalances?.[sellerIndex]) ? txData.meta.postBalances[sellerIndex] / 1e9 : 0;
 
-    const traderPostPercentToken = 100 * tokenAmount / (tokenAmount + virtualTokenReserves);
-    const traderPostPercentToken2 = 100 * sellerPostTokenAmount / (sellerPostTokenAmount + virtualTokenReserves);
+    //const traderPostPercentToken_OLD = 100 * tokenAmount / (tokenAmount + virtualTokenReserves);
+    const traderPostPercentToken = 100 * sellerPostTokenAmount / (sellerPostTokenAmount + virtualTokenReserves);
 
 
     // Créer un objet pour stocker les informations de la vente
@@ -405,7 +408,8 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
         solAmount,
         tokenAmount,
         price,
-        traderPostBalanceSol, // ou sellerPostSolBalance?
+        traderPreBalanceSol,
+        traderPostBalanceSol, // TODO: fusionner traderPostBalanceSol et sellerPostSolBalance
         traderPostBalanceToken: sellerPostTokenAmount,
         traderPostPercentToken,
         virtualSolReserves,
