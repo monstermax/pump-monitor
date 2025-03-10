@@ -438,14 +438,15 @@ class PumpBot {
             //const minSolInWalletDefault = 0.001;
 
             if (this.settings?.minSolInWallet && buySolAmount > this.settings.minSolInWallet) {
-                console.warn(`${now()} autoBuy ⚠️ => Montant demandé (${buySolAmount}) supérieur à la somme disponible (${minSolInWalletDefault}) => Achat annulé`);
+                console.warn(`${now()} autoBuy ⚠️ => Montant demandé (${buySolAmount}) supérieur à la somme disponible (${this.settings.minSolInWallet}) => Achat refusé`);
                 return;
             }
 
-            if (this.settings?.minBuyAmount && buySolAmount < this.settings?.minBuyAmount) {
-                console.warn(`${now()} autoBuy ⚠️ => Montant demandé inférieur au minimum autorisé => Achat annulé`);
+            if (this.settings?.minBuyAmount && buySolAmount < this.settings.minBuyAmount) {
+                console.warn(`${now()} autoBuy ⚠️ => Montant demandé (${buySolAmount}) inférieur au minimum autorisé (${this.settings.minBuyAmount}) => Achat annulé`);
                 return;
             }
+
 
             this.buyToken(tokenInfos, buySolAmount)
                 .then(() => {
