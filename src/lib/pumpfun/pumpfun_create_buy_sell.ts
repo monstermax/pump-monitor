@@ -1,11 +1,9 @@
 // pumpfun_create_buy_sell.ts
 
-import { Commitment, Connection, Finality, Keypair, PublicKey, VersionedTransactionResponse, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { createAssociatedTokenAccountInstruction, getAccount, getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Commitment, Connection, PublicKey } from "@solana/web3.js";
 
 import { DEFAULT_COMMITMENT } from "./pumpfun_tx";
 import { BondingCurveAccount, getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
-import { GlobalAccount } from "./pumpfun_global_account";
 
 
 /* ######################################################### */
@@ -20,8 +18,8 @@ export const METADATA_SEED = "metadata";
 
 export const DEFAULT_DECIMALS = 6;
 
-//export const FEE_RECIPIENT = new PublicKey("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM");
-export const FEE_RECIPIENT = new PublicKey("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
+//export const FEE_RECIPIENT = new PublicKey("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM"); // old
+export const FEE_RECIPIENT = new PublicKey("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV"); // new 2025-03-09
 
 /* ######################################################### */
 

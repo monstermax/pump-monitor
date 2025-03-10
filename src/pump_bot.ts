@@ -2,128 +2,24 @@
 
 import WebSocket from 'ws';
 import { Connection, Keypair, VersionedTransactionResponse } from '@solana/web3.js';
+import base58 from 'bs58';
 
 import { appConfig } from "./env";
 import { getTime, sleep } from './lib/utils/time.util';
 import { retryAsync } from './lib/utils/promise.util';
 import { WebsocketHandlers, WsConnection } from './lib/utils/websocket';
 import { asserts } from './lib/utils/asserts';
-import * as pumpWsApi from './lib/pumpfun/pumpfun_websocket_api';
 import { parsePumpTransaction, PumpTokenInfo, TradeInfo } from './lib/pumpfun/pumpfun_decoder';
 import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/pumpfun_web_api';
 import { getDynamicPriorityFee, sendSolanaTransaction } from './lib/solana/transaction';
-
-import type { TransactionResult } from './services/Trading.service';
-import type { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './listeners/PumpWebsocketApi.listener';
-import base58 from 'bs58';
-import { MagicConnection } from './lib/solana/MagicConnection';
 import { formatAddress } from './lib/solana/account';
 import { padCenter } from './lib/utils/text.utils';
 
-
-/* ######################################################### */
-
-
-type Status = 'idle' | 'wait_for_buy' | 'buying' | 'hold' | 'wait_for_sell' | 'selling' | 'delaying';
-
-
-type SelectedToken = {
-    tokenAddress: string,
-    mintMessage: WsCreateTokenResult,
-    tradesMessages: WsTokenTradeResult[],
-    holders: Map<string, number>;
-};
-
-type Position = {
-    tokenAddress: string,
-    preBalance: number,
-    postBalance: number | null,
-    recommandedSolAmount: number,
-    buySolCost: number, // montant réel dépensé (frais/taxes inclus) => postBalance - preBalance
-    buySolAmount: number, // montant dépensé pour le swap (hors taxes) => tokenAmount * tokenPrice
-    buyPrice: string,
-    tokenAmount: number, // holding // string ?
-    sellPrice?: string,
-    sellSolAmount?: number,   // montant recu par le swap (hors taxes)  => tokenAmount * tokenPrice
-    sellSolReward?: number | null, // montant réel recu (frais/taxes inclus) => postBalance - preBalance
-    checkedBalance: { amount: number, lastUpdated: Date } | null,
-    profit: number | null,
-    timestamp: Date,
-}
-
-type TokenKpis = {
-    buyPrice: string,
-    tokenAmount: number,
-    currentPrice: string,
-    profit: number,
-    mintAge: number,
-    weightedScore: number[][],
-    finalScore: number,
-    percentOfAth: number,
-    lastTrades3BuyPercent: number,
-    lastTrades5BuyPercent: number,
-    minPrice: number,
-    maxPrice: number,
-}
-
-type FastListenerCreateTokenInput = {
-    type: 'created';
-    hash: string;
-    accounts: {
-        mint: string;
-        bonding_curve: string;
-        associated_bonding_curve: string;
-        global: string;
-        user: string;
-    };
-    index: number;
-    timestamp: number;
-}
-
-
-type FastListenerTradeInput = {
-    sol_amount: number;
-    token_amount: number;
-    is_buy: boolean;
-    virtual_token_reserves: number;
-    virtual_sol_reserves: number;
-    user: string;
-    timestamp: number;
-    type: 'sell' | 'buy';
-    accounts: {
-        global: string;
-        fee: string;
-        mint: string;
-        bonding_curve: string;
-        associated_bonding_curve: string;
-        associated_user: string;
-        user: string;
-    };
-    hash: string;
-    index: number;
-};
-
-
-type FastListenerMessage = (FastListenerCreateTokenInput | FastListenerTradeInput | FastListenerBalanceUpdatedInput);
-
-type FastListenerBalanceUpdatedInput = {
-    type: 'updated_account_balance';
-    user?: string,
-    new_balance: number;
-}
-
-
-type BotSettings = {
-    minSolInWallet?: number;
-    defaultBuyAmount?: number;
-    minBuyAmount?: number;
-    maxBuyAmount?: number;
-    scoreMinForBuy?: number;
-    scoreMinForSell?: number;
-    stopLimit?: number;
-    takeProfit?: number;
-    trailingStop?: number;
-}
+import type { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './monitor/listeners/PumpWebsocketApi.listener';
+import type { BotSettings, FastListenerCreateTokenInput, FastListenerMessage, FastListenerTradeInput, Position, SelectedToken, Status, TokenKpis } from './bot/bot_types';
+import { TransactionResult } from './lib/pumpfun/pumpfun_create';
+import { PumpfunWebsocketApiSubscriptions } from './bot/websocket_subscriptions';
+import { error, log, warn } from './lib/utils/console';
 
 
 /* ######################################################### */
@@ -135,10 +31,10 @@ const fastListenerMints = new Map<string, FastListenerCreateTokenInput>;
 const fastListenerTrades = new Map<string, FastListenerTradeInput>;
 
 const botSettings: BotSettings = {
-    minSolInWallet: 0.01,
-    defaultBuyAmount: 0.07,
+    minSolInWallet: 0.05,
+    defaultBuyAmount: 0.10,
     minBuyAmount: 0.05,
-    maxBuyAmount: 0.10,
+    maxBuyAmount: 0.15,
     scoreMinForBuy: 60,
     scoreMinForSell: 60,
     stopLimit: 20,    // 20% => si on est en perte de plus de 20%
@@ -151,7 +47,8 @@ const botSettings: BotSettings = {
 
 async function main() {
 
-    const wallet: Keypair = appConfig.solana.WalletPrivateKey ? Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey)) : Keypair.generate();
+    //const wallet: Keypair = appConfig.solana.WalletPrivateKey ? Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey)) : Keypair.generate();
+    const wallet: Keypair = Keypair.generate();
 
     const bot = new PumpBot(wallet, botSettings);
 
@@ -166,7 +63,7 @@ async function main() {
                 log(`⚠️ WebSocket ${connectionName} closed`);
                 bot.destroyWebsocket();
             },
-            onerror: (ws: WebSocket, err: Error) => error(`${now()} ❌ WebSocket ${connectionName} error: ${err.message}`),
+            onerror: (ws: WebSocket, err: Error) => error(`❌ WebSocket ${connectionName} error: ${err.message}`),
             onreconnect: () => log(`📢 Tentative de reconnexion du websocket ${connectionName} ...`),
         }
 
@@ -182,7 +79,7 @@ async function main() {
             onconnect: (ws: WebSocket) => void (0),
             onmessage: (ws: WebSocket, data: WebSocket.Data) => bot.handleSolanaPumpTransactionMessage(ws, data),
             onclose: (ws: WebSocket) => log(`⚠️ WebSocket ${connectionName} closed`),
-            onerror: (ws: WebSocket, err: Error) => error(`${now()} ❌ WebSocket ${connectionName} error: ${err.message}`),
+            onerror: (ws: WebSocket, err: Error) => error(`❌ WebSocket ${connectionName} error: ${err.message}`),
             onreconnect: () => log(`📢 Tentative de reconnexion du websocket ${connectionName} ...`),
         }
 
@@ -234,7 +131,7 @@ class PumpBot {
 
     startListeningForTokensMint(ws?: WebSocket) {
         if (this.status !== 'idle') {
-            warn(`${now()} Etat "idle" requis`);
+            warn(`Etat "idle" requis`);
             return;
         }
 
@@ -283,7 +180,7 @@ class PumpBot {
             }
 
         } catch (err: any) {
-            warn(`${now()} ❌ Erreur de décodage du message ${data.toString()}`);
+            warn(`❌ Erreur de décodage du message ${data.toString()}`);
         }
     }
 
@@ -292,12 +189,12 @@ class PumpBot {
     private handlePumpCreateTokenMessage(mintMessage: WsCreateTokenResult) {
 
         if (this.status !== 'wait_for_buy') {
-            warn(`${now()} handlePumpCreateTokenMessage => ⚠️ Etat "${this.status}" inattendu. Etat "wait_for_buy" requis. Mint ignoré`);
+            warn(`handlePumpCreateTokenMessage => ⚠️ Etat "${this.status}" inattendu. Etat "wait_for_buy" requis. Mint ignoré`);
             return;
         }
 
         if (this.currentPosition) {
-            warn(`${now()} handlePumpCreateTokenMessage => ⚠️ Mint inattendu. Une position est déjà ouverte. Mint ignoré`);
+            warn(`handlePumpCreateTokenMessage => ⚠️ Mint inattendu. Une position est déjà ouverte. Mint ignoré`);
             return;
         }
 
@@ -313,7 +210,7 @@ class PumpBot {
                             this.autoBuy(mintMessage, tokenInfos);
 
                         } else {
-                            warn(`${now()} handlePumpCreateTokenMessage => ⚠️ Transaction inattendue. Une position est déjà ouverte. Transaction ignorée`);
+                            warn(`handlePumpCreateTokenMessage => ⚠️ Transaction inattendue. Une position est déjà ouverte. Transaction ignorée`);
                         }
                     }
                 })
@@ -326,27 +223,27 @@ class PumpBot {
     private handlePumpTradeTokenMessage(tradeMessage: WsTokenTradeResult) {
 
         if (this.status !== 'wait_for_sell') {
-            //warn(`${now()} handlePumpTradeTokenMessage => ⚠️ Etat "${this.status}" inattendu. Etat "wait_for_sell" requis. Impossible de traiter le trade`);
+            //warn(`handlePumpTradeTokenMessage => ⚠️ Etat "${this.status}" inattendu. Etat "wait_for_sell" requis. Impossible de traiter le trade`);
             return;
         }
 
         if (!this.currentToken) {
-            warn(`${now()} handlePumpTradeTokenMessage => ⚠️ Trade inattendu. Aucun token en position. Trade ignoré`);
+            warn(`handlePumpTradeTokenMessage => ⚠️ Trade inattendu. Aucun token en position. Trade ignoré`);
             return;
         }
 
         if (!this.tokenInfos) {
-            warn(`${now()} handlePumpTradeTokenMessage => ⚠️ Trade inattendu. Aucune infos sur le token selectionné. Trade ignoré`);
+            warn(`handlePumpTradeTokenMessage => ⚠️ Trade inattendu. Aucune infos sur le token selectionné. Trade ignoré`);
             return;
         }
 
         if (!this.currentPosition) {
-            warn(`${now()} handlePumpTradeTokenMessage => ⚠️ Trade inattendu. Aucune position ouverte. Trade ignoré`);
+            warn(`handlePumpTradeTokenMessage => ⚠️ Trade inattendu. Aucune position ouverte. Trade ignoré`);
             return;
         }
 
         if (tradeMessage.mint !== this.currentToken.tokenAddress) {
-            warn(`${now()} handlePumpTradeTokenMessage => ⚠️ Trade du token ${tradeMessage.mint} inattendu. (token actif = ${this.currentToken.tokenAddress}). Trade ignoré`);
+            warn(`handlePumpTradeTokenMessage => ⚠️ Trade du token ${tradeMessage.mint} inattendu. (token actif = ${this.currentToken.tokenAddress}). Trade ignoré`);
             return;
         }
 
@@ -384,7 +281,7 @@ class PumpBot {
             messages = JSON.parse(data.toString());
 
         } catch (err: any) {
-            warn(`${now()} ❌ Erreur de décodage du message ${data.toString()}`);
+            warn(`❌ Erreur de décodage du message ${data.toString()}`);
             return;
         }
 
@@ -410,17 +307,17 @@ class PumpBot {
 
     private async autoBuy(mintMessage: WsCreateTokenResult, tokenInfos: PumpTokenInfo) {
         if (this.status !== 'wait_for_buy') {
-            //warn(`${now()} autoBuy => ⚠️ Invalide statut ${this.status}. Impossible d'acheter`);
+            //warn(`autoBuy => ⚠️ Invalide statut ${this.status}. Impossible d'acheter`);
             return;
         }
 
         if (this.currentToken) {
-            warn(`${now()} autoBuy => ⚠️ Un token est déjà en position => Achat annulé`);
+            warn(`autoBuy => ⚠️ Un token est déjà en position => Achat annulé`);
             return;
         }
 
         if (this.currentPosition) {
-            warn(`${now()} autoBuy => ⚠️ Une position est déjà ouverte => Achat annulé`);
+            warn(`autoBuy => ⚠️ Une position est déjà ouverte => Achat annulé`);
             return;
         }
 
@@ -441,7 +338,7 @@ class PumpBot {
                 this.pumpfunWebsocketApiSubscriptions.subscribeToTokens([mintMessage.mint]);
 
             } else {
-                warn(`${now()} autoBuy => ⚠️ Souscriptions websocket non disponibles => Achat annulé`);
+                warn(`autoBuy => ⚠️ Souscriptions websocket non disponibles => Achat annulé`);
                 return;
             }
 
@@ -453,12 +350,12 @@ class PumpBot {
             const buySolAmount = checkForBuyResult.amount; // TODO: Math.min(balanceSol, checkForBuyResult.amount)
 
             if (this.settings?.minSolInWallet && buySolAmount > maxSolAmount) {
-                warn(`${now()} autoBuy => ⚠️ Montant demandé (${buySolAmount}) supérieur à la somme disponible (${maxSolAmount}) => Achat refusé`);
+                warn(`autoBuy => ⚠️ Montant demandé (${buySolAmount}) supérieur à la somme disponible (${maxSolAmount}) => Achat refusé`);
                 return;
             }
 
             if (this.settings?.minBuyAmount && buySolAmount < this.settings.minBuyAmount) {
-                warn(`${now()} autoBuy => ⚠️ Montant demandé (${buySolAmount}) inférieur au minimum autorisé (${this.settings.minBuyAmount}) => Achat annulé`);
+                warn(`autoBuy => ⚠️ Montant demandé (${buySolAmount}) inférieur au minimum autorisé (${this.settings.minBuyAmount}) => Achat annulé`);
                 return;
             }
 
@@ -469,7 +366,7 @@ class PumpBot {
                     this.watchForSell(tokenInfos);
                 })
                 .catch((err: any) => {
-                    warn(`${now()} ❌ Achat échoué. ${err.message}`);
+                    warn(`❌ Achat échoué. ${err.message}`);
 
                     this.setStatus('idle');
                     //this.status = 'idle';
@@ -492,22 +389,22 @@ class PumpBot {
 
     private async autoSell(tokenInfos: PumpTokenInfo) {
         if (this.status !== 'wait_for_sell') {
-            warn(`${now()} autoSell => ⚠️ Invalide statut ${this.status} => Vente annulée`);
+            warn(`autoSell => ⚠️ Invalide statut ${this.status} => Vente annulée`);
             return;
         }
 
         if (!this.currentToken) {
-            warn(`${now()} autoSell => ⚠️ Aucun token en position => Vente annulée`);
+            warn(`autoSell => ⚠️ Aucun token en position => Vente annulée`);
             return;
         }
 
         if (!this.currentPosition) {
-            warn(`${now()} autoSell => ⚠️ Aucune position ouverte => Vente annulée`);
+            warn(`autoSell => ⚠️ Aucune position ouverte => Vente annulée`);
             return;
         }
 
         if (tokenInfos.tokenAddress !== this.currentToken.tokenAddress) {
-            warn(`${now()} autoSell => ⚠️ Trade du token ${tokenInfos.tokenAddress} inattendu. (token actif = ${this.currentToken.tokenAddress}) => Vente annulée`);
+            warn(`autoSell => ⚠️ Trade du token ${tokenInfos.tokenAddress} inattendu. (token actif = ${this.currentToken.tokenAddress}) => Vente annulée`);
             return;
         }
 
@@ -518,7 +415,7 @@ class PumpBot {
             log(); // pour cloturer les 2 lignes dynamiques
             log(); // pour cloturer les 2 lignes dynamiques
             log(); // ligne vide
-            log(`autoSell => 💡 Recommandation de vente => ${checkForSellResult.amount} ${tokenInfos.tokenSymbol} (${checkForSellResult.reason})`);
+            log(`💡 Recommandation de vente => ${checkForSellResult.amount} ${tokenInfos.tokenSymbol} (${checkForSellResult.reason})`);
 
             this.status = 'selling';
             const sellTokenAmount = checkForSellResult.amount;
@@ -529,7 +426,7 @@ class PumpBot {
                     this.startListeningForTokensMint();
                 })
                 .catch((err: any) => {
-                    warn(`${now()} ❌ Vente échouée. ${err.message}`);
+                    warn(`❌ Vente échouée. ${err.message}`);
 
                     this.status = 'delaying';
                     setTimeout(() => this.status = 'wait_for_sell', 5_000);
@@ -541,22 +438,22 @@ class PumpBot {
     private watchForSell(tokenInfos: PumpTokenInfo) {
 
         if (this.status !== 'hold') {
-            warn(`${now()} watchForSell => ⚠️ Etat "${this.status}" inattendu. Etat "hold" requis. Surveillance des ventes abandonnée`);
+            warn(`watchForSell => ⚠️ Etat "${this.status}" inattendu. Etat "hold" requis. Surveillance des ventes abandonnée`);
             return;
         }
 
         if (!this.currentToken) {
-            warn(`${now()} watchForSell => ⚠️ Aucun token en position. Surveillance des ventes abandonnée`);
+            warn(`watchForSell => ⚠️ Aucun token en position. Surveillance des ventes abandonnée`);
             return;
         }
 
         if (tokenInfos.tokenAddress !== this.currentToken.tokenAddress) {
-            warn(`${now()} watchForSell => ⚠️ Token inattendu. Surveillance des ventes abandonnée`);
+            warn(`watchForSell => ⚠️ Token inattendu. Surveillance des ventes abandonnée`);
             return;
         }
 
         if (!this.currentPosition) {
-            warn(`${now()} watchForSell => ⚠️ Aucune position ouverte. Surveillance des ventes abandonnée`);
+            warn(`watchForSell => ⚠️ Aucune position ouverte. Surveillance des ventes abandonnée`);
             return;
         }
 
@@ -578,13 +475,13 @@ class PumpBot {
 
         const logIntervalId = setInterval(() => {
             if (watchedTokenAddress !== this.currentToken?.tokenAddress || ! this.currentPosition || this.status !== 'wait_for_sell') {
-                //warn(`${now()} watchForSell => ⚠️ Changement du contexte. Surveillance des ventes stoppée`);
+                //warn(`watchForSell => ⚠️ Changement du contexte. Surveillance des ventes stoppée`);
                 clearInterval(logIntervalId);
                 return;
             }
 
             if (! this.currentKpis) {
-                warn(`${now()} watchForSell => ⚠️ Pas de KPI trouvé pour le token. Surveillance des ventes dégradée`);
+                warn(`watchForSell => ⚠️ Pas de KPI trouvé pour le token. Surveillance des ventes dégradée`);
                 return;
             }
 
@@ -672,27 +569,27 @@ class PumpBot {
 
     private async buyToken(tokenInfos: PumpTokenInfo, solAmount: number) {
         if (this.status !== 'buying') {
-            warn(`${now()} buyToken => ⚠️ Processus d'achat non initié`);
+            warn(`buyToken => ⚠️ Processus d'achat non initié`);
             return;
         }
 
         if (!this.currentToken) {
-            warn(`${now()} buyToken => ⚠️ Aucun token actif => Achat annulé`);
+            warn(`buyToken => ⚠️ Aucun token actif => Achat annulé`);
             return;
         }
 
         if (tokenInfos.tokenAddress !== this.currentToken.tokenAddress) {
-            warn(`${now()} buyToken => ⚠️ Achat sur le mauvais token => Achat annulé`);
+            warn(`buyToken => ⚠️ Achat sur le mauvais token => Achat annulé`);
             return;
         }
 
         if (this.currentPosition) {
-            warn(`${now()} buyToken => ⚠️ Une position est déjà ouverte => Achat annulé`);
+            warn(`buyToken => ⚠️ Une position est déjà ouverte => Achat annulé`);
             return;
         }
 
         if (!this.connection) {
-            warn(`${now()} buyToken => ⚠️ Aucune connexion solana/web3 ouverte => Achat annulé`);
+            warn(`buyToken => ⚠️ Aucune connexion solana/web3 ouverte => Achat annulé`);
             return;
         }
 
@@ -704,14 +601,14 @@ class PumpBot {
         log()
 
 
-        log(`Achat en cours du token ${this.currentToken.tokenAddress} Step 1/3`);
+        log(`Achat en cours du token ${this.currentToken.tokenAddress} => step 1️⃣`);
 
 
         // 1) créer transaction buy
         const tx = await buildPortalBuyTransaction(this.wallet.publicKey, this.currentToken.tokenAddress, solAmount, this.slippage, this.priorityFee);
         //log('buy tx:', tx);
 
-        log(`Achat en cours du token ${this.currentToken.tokenAddress} Step 2/3`);
+        log(`Achat en cours du token ${this.currentToken.tokenAddress} => step 2️⃣`);
 
 
         // 2) envoyer transaction buy
@@ -724,13 +621,13 @@ class PumpBot {
         if (!txResult.success || !txResult.signature) {
 
             if (true) {
-                warn(`${now()} Erreur pendant l'achat`);
+                warn(`Erreur pendant l'achat`);
 
                 if (txResult.error) {
-                    warn(`${now()}  - message: ${txResult.error.transactionMessage}`);
+                    warn(` - message: ${txResult.error.transactionMessage}`);
 
-                    txResult.error.transactionLogs.forEach(log => {
-                        warn(`${now()}  - log: ${log}`);
+                    txResult.error.transactionLogs?.forEach(log => {
+                        warn(` - log: ${log}`);
                     })
 
                     //log('ERR', txResult.error.transactionError)
@@ -740,13 +637,13 @@ class PumpBot {
             throw new Error(`Erreur pendant l'achat. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
 
-        log(`Attente Transaction: https://solscan.io/tx/` + txResult.signature);
+        log(`⌛ Attente Transaction: https://solscan.io/tx/` + txResult.signature);
 
 
         // 3) attendre et récupérer transaction buy
         const txResponseResult = txResult.results ?? await getTransaction(this.connection, txResult.signature);
 
-        log(`✔️ Transaction d'achat récupérée`);
+        //log(`✔️ Transaction d'achat récupérée`);
 
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
@@ -759,12 +656,10 @@ class PumpBot {
 
         // Mise à jour des balances
         const checkedTokenBalance = { amount: pumpResult.traderPostBalanceToken, lastUpdated: pumpResult.timestamp };
-        //log(`buyToken 📢 => Balance Token mise à jour : ${checkedTokenBalance.amount.toFixed(9)} ${tokenInfos.tokenSymbol}`);
 
         this.solBalance = { amount: pumpResult.traderPostBalanceSol, lastUpdated: pumpResult.timestamp };
-        //log(`buyToken 📢 => Balance Sol mise à jour : ${this.solBalance.amount.toFixed(9)} SOL`);
 
-        log(`buyToken 📢 => Balances UPDATED => ${this.solBalance.amount.toFixed(9)} SOL | ${checkedTokenBalance.amount.toFixed(9)} ${tokenInfos.tokenSymbol}`);
+        log(`⚖️ Balances UPDATED => ${this.solBalance.amount.toFixed(9)} SOL | ${checkedTokenBalance.amount.toFixed(9)} ${tokenInfos.tokenSymbol}`);
 
 
         // Création de la position
@@ -785,7 +680,7 @@ class PumpBot {
 
         this.status = 'hold';
 
-        log(`Achat en cours du token ${this.currentToken.tokenAddress} Step 3/3`);
+        log(`Achat en cours du token ${this.currentToken.tokenAddress} => step 3️⃣`);
 
         log()
         log('#'.repeat(100))
@@ -800,27 +695,27 @@ class PumpBot {
 
     private async sellToken(tokenAddress: string, tokenAmount: number) {
         if (this.status !== 'selling') {
-            warn(`${now()} sellToken => ⚠️ Processus de vente non initié`);
+            warn(`sellToken => ⚠️ Processus de vente non initié`);
             return;
         }
 
         if (!this.currentToken) {
-            warn(`${now()} sellToken => ⚠️ Aucun token actif => Vente annulée`);
+            warn(`sellToken => ⚠️ Aucun token actif => Vente annulée`);
             return;
         }
 
         if (tokenAddress !== this.currentToken.tokenAddress) {
-            warn(`${now()} sellToken => ⚠️ Vente du mauvais token => Vente annulée`);
+            warn(`sellToken => ⚠️ Vente du mauvais token => Vente annulée`);
             return;
         }
 
         if (!this.currentPosition) {
-            warn(`${now()} sellToken => ⚠️ Aucune position ouverte => Vente annulée`);
+            warn(`sellToken => ⚠️ Aucune position ouverte => Vente annulée`);
             return;
         }
 
         if (!this.connection) {
-            warn(`${now()} sellToken => ⚠️ Aucune connexion solana/web3 ouverte => Vente annulée`);
+            warn(`sellToken => ⚠️ Aucune connexion solana/web3 ouverte => Vente annulée`);
             return;
         }
 
@@ -832,7 +727,7 @@ class PumpBot {
         log()
 
 
-        log(`Vente en cours du token ${tokenAddress} Step 1/3`);
+        log(`Vente en cours du token ${tokenAddress} => step 1️⃣`);
 
         // TODO
 
@@ -840,7 +735,7 @@ class PumpBot {
         const tx = await buildPortalSellTransaction(this.wallet.publicKey, tokenAddress, tokenAmount, this.slippage, this.priorityFee);
         //log('sell tx:', tx);
 
-        log(`Vente en cours du token ${tokenAddress} Step 2/3`);
+        log(`Vente en cours du token ${tokenAddress} => step 2️⃣`);
 
 
         // 2) envoyer transaction sell
@@ -853,13 +748,13 @@ class PumpBot {
         if (!txResult.success || !txResult.signature) {
 
             if (true) {
-                warn(`${now()} Erreur pendant la vente`);
+                warn(`Erreur pendant la vente`);
 
                 if (txResult.error) {
-                    warn(`${now()}  - message: ${txResult.error.transactionMessage}`);
+                    warn(` - message: ${txResult.error.transactionMessage}`);
 
-                    txResult.error.transactionLogs.forEach(log => {
-                        warn(`${now()}  - log: ${log}`);
+                    txResult.error.transactionLogs?.forEach(log => {
+                        warn(` - log: ${log}`);
                     })
 
                     //log('ERR', txResult.error.transactionError)
@@ -869,13 +764,13 @@ class PumpBot {
             throw new Error(`Erreur pendant la vente. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
 
-        log(`Attente Transaction: https://solscan.io/tx/` + txResult.signature);
+        log(`⌛ Attente Transaction: https://solscan.io/tx/` + txResult.signature);
 
 
         // 3) attendre et récupérer transaction sell
         const txResponseResult = txResult.results ?? await getTransaction(this.connection, txResult.signature);
 
-        log(`✔️ Transaction de vente récupérée`);
+        //log(`✔️ Transaction de vente récupérée`);
 
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
@@ -889,12 +784,10 @@ class PumpBot {
 
         // Mise à jour des balances
         const checkedTokenBalance = { amount: pumpResult.traderPostBalanceToken, lastUpdated: pumpResult.timestamp };
-        //log(`sellToken 📢 => Balance Token mise à jour : ${checkedTokenBalance.amount.toFixed(9)} ${this.currentToken.mintMessage.symbol}`);
 
         this.solBalance = { amount: pumpResult.traderPostBalanceSol, lastUpdated: pumpResult.timestamp };
-        //log(`sellToken 📢 => Balance Sol mise à jour : ${this.solBalance.amount.toFixed(9)} SOL`);
 
-        log(`sellToken 📢 => Balances UPDATED => ${this.solBalance.amount.toFixed(9)} SOL | ${checkedTokenBalance.amount.toFixed(9)} ${this.currentToken.mintMessage.symbol}`);
+        log(`⚖️ Balances UPDATED => ${this.solBalance.amount.toFixed(9)} SOL | ${checkedTokenBalance.amount.toFixed(9)} ${this.currentToken.mintMessage.symbol}`);
 
 
 
@@ -912,10 +805,10 @@ class PumpBot {
 
 
         if (checkedTokenBalance.amount !== 0) {
-            warn(`${now()} ⚠️ Solde de tokens non nul après la vente. Process stoppé pour analyse.`);
+            warn(`⚠️ Solde de tokens non nul après la vente. Process stoppé pour analyse.`);
 
             if (checkedTokenBalance.amount >= 1) {
-                warn(`${now()} ⚠️ Process stoppé pour analyse.`);
+                warn(`⚠️ Process stoppé pour analyse.`);
                 process.exit();
             }
         }
@@ -930,7 +823,7 @@ class PumpBot {
         }
 
 
-        log(`Vente en cours du token ${tokenAddress} Step 3/3`);
+        log(`Vente en cours du token ${tokenAddress} => step 3️⃣`);
 
         const gain = (this.currentPosition.postBalance ?? 0) - this.currentPosition.preBalance;
 
@@ -1018,7 +911,7 @@ class PumpBot {
                         : 20;
 
         let buySolScore = devBuySolAmount <= 0.1
-            ? 80
+            ? 70
             : devBuySolAmount <= 0.5
                 ? 60
                 : devBuySolAmount <= 1
@@ -1026,7 +919,7 @@ class PumpBot {
                     : 20;
 
         let buyTokenPercentageScore = devBuyTokenPercentage <= 1
-            ? 80
+            ? 70
             : devBuyTokenPercentage <= 2
                 ? 60
                 : devBuyTokenPercentage <= 5
@@ -1072,7 +965,7 @@ class PumpBot {
             const solAmount = buyMinAmount + scoreNormalized * buyAmountRange / 100;
 
             if (buyMaxAmount <= buyMinAmount || solAmount <= 0) {
-                warn(`${now()} evaluateTokenForBuy => ⚠️ Balance SOL insuffisante`);
+                warn(`evaluateTokenForBuy => ⚠️ Balance SOL insuffisante`);
                 process.exit();
                 return { canBuy: false, amount: 0, reason: `Balance SOL insuffisante` }
             }
@@ -1189,7 +1082,7 @@ class PumpBot {
 
 
         if (position.tokenAmount <= 0) {
-            warn(`${now()} evaluateTokenForSell => ⚠️ Balance Token insuffisante`);
+            warn(`evaluateTokenForSell => ⚠️ Balance Token insuffisante`);
             return { canSell: false, amount: 0, reason: `Balance Token insuffisante` }
         }
 
@@ -1211,49 +1104,6 @@ class PumpBot {
         }
     }
 
-
-}
-
-
-
-
-
-
-
-
-// Souscriptions
-
-
-class PumpfunWebsocketApiSubscriptions {
-    ws: WebSocket;
-
-    constructor(ws: WebSocket) {
-        this.ws = ws;
-    }
-
-
-    subscribeNewTokens() {
-        pumpWsApi.subscribeNewToken(this.ws);
-        log(`🔔 Inscrit aux nouveaux tokens`);
-    }
-
-
-    unsubscribeNewTokens() {
-        pumpWsApi.unsubscribeNewToken(this.ws);
-        log(`🛎️ Désinscrit des nouveaux tokens`);
-    }
-
-
-    subscribeToTokens(tokenAddresses: string[]) {
-        pumpWsApi.subscribeTokenTrade(this.ws, tokenAddresses);
-        log(`🔔 Inscrit aux tokens ${tokenAddresses.join(' | ')}`);
-    }
-
-
-    unsubscribeToTokens(tokenAddresses: string[]) {
-        pumpWsApi.unsubscribeTokenTrade(this.ws, tokenAddresses);
-        log(`🛎️ Désinscrit des tokens ${tokenAddresses.join(' | ')}`);
-    }
 
 }
 
@@ -1318,40 +1168,13 @@ async function retrieveMintTransactionResultWithFastListener(signature: string, 
         mintInput = fastListenerMints.get(signature)
         if (mintInput) break;
 
-        //warn(`${now()} Transaction ${signature} non trouvée dans les ${fastListenerMints.size} transactions de FastListener.`);
+        //warn(`Transaction ${signature} non trouvée dans les ${fastListenerMints.size} transactions de FastListener.`);
 
         await sleep(50);
     }
 
     return mintInput ?? null;
 }
-
-
-function log(...args: any[]) {
-    args.unshift(...[now(), '|']);
-    console.log(...args)
-}
-
-function warn(...args: any[]) {
-    args.unshift(...[now(), '|']);
-    console.warn(...args)
-}
-
-function error(...args: any[]) {
-    args.unshift(...[now(), '|']);
-    console.error(...args)
-}
-
-
-function now(date?: Date) {
-    return getTime(date);
-    //return (date ?? new Date).toLocaleTimeString('fr-FR', { timeStyle: 'medium', second: 'numeric' });
-    //return (date ?? new Date).toISOString()
-    //    .replace('Z', '')
-    //    .replace('T', ' ');
-}
-
-
 
 
 

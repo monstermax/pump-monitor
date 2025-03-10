@@ -1,15 +1,33 @@
 // pumpfun_create.ts
 
-import { Commitment, Connection, Finality, Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from "@solana/web3.js";
+import { Commitment, Connection, Finality, Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction, VersionedTransactionResponse } from "@solana/web3.js";
 import { getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { MPL_TOKEN_METADATA_PROGRAM_ID } from "@metaplex-foundation/mpl-token-metadata";
 
-import { PriorityFee, TransactionResult } from "../../services/Trading.service";
 import { calculateWithSlippageBuy, CreateTokenMetadata, FEE_RECIPIENT, getGlobalAccountPubKey, METADATA_SEED, PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
 import { getBuyInstructions } from "./pumpfun_buy";
 import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx } from "./pumpfun_tx";
 import { getGlobalAccount } from "./pumpfun_global_account";
 import { getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
+
+
+/* ######################################################### */
+
+export type TransactionError = Error & { transactionError?: Error, transactionLogs?: string[], transactionMessage?: string };
+
+export type TransactionResult = {
+    signature?: string;
+    error?: TransactionError;
+    results?: VersionedTransactionResponse;
+    success: boolean;
+};
+
+
+export type PriorityFee = {
+    unitLimit: number;
+    unitPrice: number;
+};
+
 
 
 /* ######################################################### */

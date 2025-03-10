@@ -3,12 +3,12 @@
 import { Commitment, Connection, Finality, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-import { PriorityFee, TransactionResult } from "../../services/Trading.service";
 import { getTokenBondingCurveAccount, PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
 import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx, simulateTransaction } from "./pumpfun_tx";
 import { getGlobalAccount } from "./pumpfun_global_account";
 import { calculateWithSlippageSell } from "./pumpfun_create_buy_sell";
 import { getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
+import { PriorityFee, TransactionResult } from "./pumpfun_create";
 
 
 /* ######################################################### */

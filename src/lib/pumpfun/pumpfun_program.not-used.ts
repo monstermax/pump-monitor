@@ -1,7 +1,7 @@
 // pumpfun.not-used.ts
 
-import { Commitment, Connection, Finality, Keypair, PublicKey, VersionedTransactionResponse, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { createAssociatedTokenAccountInstruction, getAccount, getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Commitment, Connection, PublicKey } from "@solana/web3.js";
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 import { PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
 import { DEFAULT_COMMITMENT } from "./pumpfun_tx";

@@ -4,11 +4,11 @@ import { Commitment, Connection, Finality, Keypair, PublicKey, VersionedTransact
 import { createAssociatedTokenAccountInstruction, getAccount, getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 import { sleep } from "../utils/time.util";
-import { PriorityFee, TransactionResult } from "../../services/Trading.service";
 import { FEE_RECIPIENT, getGlobalAccountPubKey, getTokenBondingCurveAccount, PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
 import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx, simulateTransaction } from "./pumpfun_tx";
 import { getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
 import { calculateWithSlippageBuy } from "./pumpfun_create_buy_sell";
+import { PriorityFee, TransactionError, TransactionResult } from "./pumpfun_create";
 
 
 /* ######################################################### */
@@ -86,11 +86,19 @@ export async function pumpFunBuy(
         // Fournir un message d'erreur plus descriptif
         const errorMessage = err instanceof Error ? err.message : String(err);
 
+
+        const errMessage = errorMessage.includes("simulation")
+            ? `Erreur de simulation: ${errorMessage}`
+            : `Erreur d'achat: ${errorMessage}`;
+
+        const error: TransactionError = new Error(errMessage);
+        error.transactionError = new Error;
+        error.transactionLogs = [];
+        error.transactionMessage = '';
+
         return {
             success: false,
-            error: errorMessage.includes("simulation")
-                ? `Erreur de simulation: ${errorMessage}`
-                : `Erreur d'achat: ${errorMessage}`
+            error
         };
     }
 }

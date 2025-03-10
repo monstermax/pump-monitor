@@ -1,8 +1,9 @@
 // pumpfun_tx.ts
 
 import { Commitment, ComputeBudgetProgram, Connection, Finality, Keypair, ParsedTransactionWithMeta, PublicKey, SendTransactionError, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction, VersionedTransactionResponse } from "@solana/web3.js";
+
 import { retryAsync } from "../utils/promise.util";
-import { PriorityFee, TransactionResult } from "../../services/Trading.service";
+import { PriorityFee, TransactionError, TransactionResult } from "./pumpfun_create";
 
 /* ######################################################### */
 
@@ -96,9 +97,14 @@ export async function sendTx(
 
             let txResult = await getTxDetails(connection, sig, commitment, finality);
             if (!txResult) {
+                const error: TransactionError = new Error("Transaction failed during confirmation");
+                error.transactionError = new Error;
+                error.transactionLogs = [];
+                error.transactionMessage = '';
+
                 return {
                     success: false,
-                    error: "Transaction failed during confirmation",
+                    error,
                     signature: sig
                 };
             }
@@ -127,8 +133,13 @@ export async function sendTx(
                     const logs = await (err as SendTransactionError).getLogs(connection);
                     console.error("SendTransactionError:", logs);
 
+                    const error: TransactionError = new Error(`${err.message}. Logs: ${logs}`);
+                    error.transactionError = new Error;
+                    error.transactionLogs = logs;
+                    error.transactionMessage = '';
+
                     return {
-                        error: `${err.message}. Logs: ${logs}`,
+                        error,
                         success: false,
                     };
 
@@ -155,9 +166,15 @@ export async function sendTx(
 
 
     // Ne devrait jamais arriver ici, mais au cas où
+
+    const error: TransactionError = new Error("Nombre maximum de tentatives dépassé");
+    error.transactionError = new Error;
+    error.transactionLogs = [];
+    error.transactionMessage = '';
+
     return {
         success: false,
-        error: "Nombre maximum de tentatives dépassé",
+        error,
     };
 }
 

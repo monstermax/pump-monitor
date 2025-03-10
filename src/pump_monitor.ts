@@ -1,17 +1,17 @@
 // pump_monitor.ts
 
-import { PumpWebsocketApi } from "./listeners/PumpWebsocketApi.listener";
-import { Service, ServiceManager } from "./managers/Service.manager";
-import { TokenManager } from "./services/TokenManager.service";
-import { TokenAnalyzer } from "./services/TokenAnalyzer.service";
-import { Database } from "./services/Database.service";
-import { Logger } from "./services/Logger.service";
-import { PriceFeed } from "./services/PriceFeed.service";
-import { PumpListener } from "./services/PumpListener.service";
-import { SystemMonitor } from "./services/SystemMonitor.service";
-import { TradingManager } from "./services/Trading.service";
-import { WebApp } from "./services/WebApp.service";
-import { PortfolioManager } from "./services/Portfolio.service";
+import { PumpWebsocketApi } from "./monitor/listeners/PumpWebsocketApi.listener";
+import { Service, ServiceManager } from "./monitor/managers/Service.manager";
+import { TokenManager } from "./monitor/services/TokenManager.service";
+import { TokenAnalyzer } from "./monitor/services/TokenAnalyzer.service";
+import { Database } from "./monitor/services/Database.service";
+import { Logger } from "./monitor/services/Logger.service";
+import { PriceFeed } from "./monitor/services/PriceFeed.service";
+import { PumpListener } from "./monitor/services/PumpListener.service";
+import { SystemMonitor } from "./monitor/services/SystemMonitor.service";
+import { TradingManager } from "./monitor/services/Trading.service";
+import { WebApp } from "./monitor/services/WebApp.service";
+import { PortfolioManager } from "./monitor/services/Portfolio.service";
 
 
 /* ######################################################### */

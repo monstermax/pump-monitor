@@ -1,5 +1,7 @@
+// transaction.ts
+
 import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
-import { TransactionResult } from "../../services/Trading.service";
+import { TransactionResult } from "../pumpfun/pumpfun_create";
 
 
 /* ######################################################### */

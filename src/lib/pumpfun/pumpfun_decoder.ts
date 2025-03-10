@@ -1,7 +1,7 @@
+// pumpfun_decoder.ts
 
 import fs from 'fs';
 import { PublicKey, VersionedTransactionResponse } from '@solana/web3.js';
-import { WsCreateTokenResult, WsTokenTradeResult } from '../../listeners/PumpWebsocketApi.listener';
 
 
 
