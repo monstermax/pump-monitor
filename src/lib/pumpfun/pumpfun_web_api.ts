@@ -6,7 +6,7 @@ import { sendSolanaTransaction } from '../solana/transaction';
 /* ######################################################### */
 
 
-export async function buildPortalBuyTransaction(walletPubKey: PublicKey, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.00001): Promise<VersionedTransaction> {
+export async function buildPortalBuyTransaction(walletPubKey: PublicKey, tokenAddress: string, solAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
     const tradeData = {
         "publicKey": walletPubKey,  // Your wallet public key
         "action": "buy",                 // "buy" or "sell"
@@ -43,7 +43,7 @@ export async function buildPortalBuyTransaction(walletPubKey: PublicKey, tokenAd
 }
 
 
-export async function buildPortalSellTransaction(walletPubKey: PublicKey, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.00001): Promise<VersionedTransaction> {
+export async function buildPortalSellTransaction(walletPubKey: PublicKey, tokenAddress: string, tokenAmount: number, slippage=10, priorityFee=0.0001): Promise<VersionedTransaction> {
     const tradeData = {
         "publicKey": walletPubKey,  // Your wallet public key
         "action": "sell",                 // "buy" or "sell"

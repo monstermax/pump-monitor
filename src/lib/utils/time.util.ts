@@ -20,3 +20,11 @@ export function getUsDateTime(date?: Date) {
 }
 
 
+
+export function getTime(date?: Date) {
+    if (date === null) return '';
+    date = date ?? new Date;
+    return date.toLocaleTimeString('fr-FR', { timeStyle: 'medium' });
+}
+
+
