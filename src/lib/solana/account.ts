@@ -31,3 +31,9 @@ export async function getTokenBalance(connection: Connection, wallet: Keypair, t
     }
 }
 
+
+
+export const formatAddress = (address: string) => {
+    if (!address) return 'N/A';
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+};

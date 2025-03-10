@@ -58,6 +58,7 @@ export type WsTokenTradeResult = {
     vSolInBondingCurve: number;
     marketCapSol: number;
     pool: string;
+    timestamp?: Date; // ajouté après reception
 }
 
 

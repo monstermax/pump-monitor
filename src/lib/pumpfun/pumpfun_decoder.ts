@@ -31,6 +31,7 @@ export interface PumpTokenInfo {
 export interface TradeInfo {
     tokenAddress: string;
     traderAddress: string;
+    feeAmount: number;
     solAmount: number;
     tokenAmount: number;
     price: string;
@@ -245,6 +246,7 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
 
     // Déterminer les montants avant/après
     const buyerIndex = accounts.findIndex(key => key === buyerAddress);
+    let feeAmount = 0;
     let solAmount = 0;
     let tokenAmount = 0;
 
@@ -253,9 +255,11 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
         const postSolBalance = txData.meta.postBalances[buyerIndex] / 1e9;
 
         // Tenir compte des frais de transaction
-        const txFee = (txData.meta.fee || 0) / 1e9;
-        solAmount = preSolBalance - postSolBalance - txFee;
+        feeAmount = (txData.meta.fee || 0) / 1e9;
+
+        solAmount = preSolBalance - postSolBalance - feeAmount; // déduction des frais de transaction pour le calcul du trade (hors taxe). les frais de pump.fun sont par contre inclus
     }
+
 
     if (buyerTokenAccount) {
         tokenAmount = buyerTokenAccount.uiTokenAmount.uiAmount ?? 0;
@@ -270,9 +274,10 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
     const { mint, user, virtualSolReserves, virtualTokenReserves, realSolReserves, realTokenReserves } = parseTradeEvent(tradeEventLog ?? '');
 
 
-    const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0;
-    const marketCapSol = Number(price) * virtualTokenReserves;
+    //const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0; // faux, biaisé par les taxes pump.fun
+    const price = calculatePumpPrice(virtualSolReserves, virtualTokenReserves)
 
+    const marketCapSol = Number(price) * virtualTokenReserves;
 
     const traderPostBalanceSol = (buyerIndex >= 0 && txData.meta?.postBalances?.[buyerIndex]) ? txData.meta.postBalances[buyerIndex] / 1e9 : 0;
 
@@ -304,9 +309,10 @@ function parseBuyInstruction(txData: VersionedTransactionResponse): TradeInfo {
     const buyInfo: TradeInfo = {
         tokenAddress: mint,
         traderAddress: buyerAddress,
+        feeAmount,
         solAmount,
         tokenAmount,
-        price: price.toFixed(10),
+        price,
         traderPostBalanceSol,
         traderPostBalanceToken: buyerPostTokenAmount,
         traderPostPercentToken,
@@ -342,13 +348,16 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
     // Pour une vente, le vendeur reçoit des SOL
     let sellerPreSolBalance = 0;
     let sellerPostSolBalance = 0;
+    let feeAmount = 0;
 
     if (sellerIndex >= 0 && txData.meta?.preBalances && txData.meta?.postBalances) {
         sellerPreSolBalance = txData.meta.preBalances[sellerIndex] / 1e9;
         sellerPostSolBalance = txData.meta.postBalances[sellerIndex] / 1e9;
+
+        feeAmount = (txData.meta.fee || 0) / 1e9;
     }
 
-    const solAmount = sellerPostSolBalance - sellerPreSolBalance;
+    const solAmount = sellerPostSolBalance - sellerPreSolBalance + feeAmount; // déduction des frais de transaction pour le calcul du trade (hors taxe). les frais de pump.fun sont par contre inclus
 
 
     // Calculer les tokens vendus
@@ -377,7 +386,9 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
     const { mint, user, virtualSolReserves, virtualTokenReserves, realSolReserves, realTokenReserves } = parseTradeEvent(tradeEventLog ?? '');
 
 
-    const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0;
+    //const price = solAmount > 0 && tokenAmount > 0 ? solAmount / tokenAmount : 0; // faux, biaisé par les taxes pump.fun
+    const price = calculatePumpPrice(virtualSolReserves, virtualTokenReserves);
+
     const marketCapSol = Number(price) * virtualTokenReserves;
 
     const traderPostBalanceSol = (sellerIndex >= 0 && txData.meta?.postBalances?.[sellerIndex]) ? txData.meta.postBalances[sellerIndex] / 1e9 : 0;
@@ -390,9 +401,10 @@ function parseSellInstruction(txData: VersionedTransactionResponse): TradeInfo {
     const sellInfo: TradeInfo = {
         tokenAddress: mint,
         traderAddress: sellerAddress,
+        feeAmount,
         solAmount,
         tokenAmount,
-        price: price.toFixed(10),
+        price,
         traderPostBalanceSol, // ou sellerPostSolBalance?
         traderPostBalanceToken: sellerPostTokenAmount,
         traderPostPercentToken,
