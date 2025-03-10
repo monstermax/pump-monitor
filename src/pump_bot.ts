@@ -435,10 +435,9 @@ class PumpBot {
             this.tokenInfos = tokenInfos;
 
             const buySolAmount = checkForBuyResult.amount; // TODO: Math.min(balanceSol, checkForBuyResult.amount)
-            //const minSolInWalletDefault = 0.001;
 
-            if (this.settings?.minSolInWallet && buySolAmount > this.settings.minSolInWallet) {
-                console.warn(`${now()} autoBuy ⚠️ => Montant demandé (${buySolAmount}) supérieur à la somme disponible (${this.settings.minSolInWallet}) => Achat refusé`);
+            if (this.settings?.minSolInWallet && buySolAmount > maxSolAmount) {
+                console.warn(`${now()} autoBuy ⚠️ => Montant demandé (${buySolAmount}) supérieur à la somme disponible (${maxSolAmount}) => Achat refusé`);
                 return;
             }
 
@@ -976,13 +975,13 @@ class PumpBot {
         const scoreNormalized = 100 * (finalScore - (this.settings?.scoreMinForBuy ?? 60)) / (100 - (this.settings?.scoreMinForBuy ?? 60));
 
         if (finalScore >= (this.settings?.scoreMinForBuy ?? 60)) {
-            const defaultAmount = this.settings?.defaultBuyAmount ?? 0.01;
-            const minAmount = Math.max(defaultAmount * 0.5, this.settings?.minBuyAmount ?? defaultAmount * 0.5);
-            const maxAmount = Math.min(defaultAmount * 1.5, this.settings?.maxBuyAmount ?? defaultAmount * 1.5);
-            const [min, max] = [minAmount, Math.min(maxAmount, maxSolAmount)];
-            const solAmount = min + scoreNormalized * (max - min) / 100;
+            const buyDefaultAmount = this.settings?.defaultBuyAmount ?? 0.01;
+            const buyMinAmount = Math.max(buyDefaultAmount * 0.5, this.settings?.minBuyAmount ?? buyDefaultAmount * 0.5);
+            const buyMaxAmount = Math.min(maxSolAmount, buyDefaultAmount * 1.5, this.settings?.maxBuyAmount ?? buyDefaultAmount * 1.5);
+            const buyAmountRange = buyMaxAmount - buyMinAmount;
+            const solAmount = buyMinAmount + scoreNormalized * buyAmountRange / 100;
 
-            if (max <= min || solAmount <= 0) {
+            if (buyMaxAmount <= buyMinAmount || solAmount <= 0) {
                 console.warn(`${now()} evaluateTokenForBuy ⚠️ => Balance SOL insuffisante`);
                 return { canBuy: false, amount: 0, reason: `Balance SOL insuffisante` }
             }
