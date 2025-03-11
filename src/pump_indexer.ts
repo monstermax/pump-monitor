@@ -70,6 +70,7 @@ async function main() {
             vTokensInBondingCurve: tradeTokenData.vTokensInBondingCurve,
             vSolInBondingCurve: tradeTokenData.vSolInBondingCurve,
             marketCapSol: tradeTokenData.marketCapSol,
+            updatedAt: tradeTokenData.timestamp,
         }
 
         await db.update('tokens', tokenUpdate, `mint = '${tradeTokenData.mint}'`);

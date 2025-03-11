@@ -74,10 +74,16 @@ select * from tokens order by createdAt desc limit 1 \G
 select mint, name, symbol, tok.price, tok.marketCapSol, count(tr.signature) as trades, createdAt, timestamp as updatedAt
 from tokens tok
 left join trades tr using (mint)
-where mint = 'FsPbUSYXyqb71HaksceqXsc1VNcDY7BEE4XMHxumpump'
 group by mint
 order by tr.timestamp desc, createdAt desc
-limit 50;
+limit 30;
+
+select mint, name, symbol, tok.price, tok.marketCapSol, count(tr.signature) as trades, createdAt, timestamp as updatedAt
+from tokens tok
+left join trades tr using (mint)
+where mint = 'EtvH36cn1ACvxzcnoVz273WZ1oiH2jPGHZxjtatnpump'
+group by mint
+order by tr.timestamp desc, createdAt desc;
 
 
 
@@ -87,7 +93,7 @@ select * from trades order by timestamp desc limit 1 \G
 
 select mint, timestamp, txType, solAmount, tokenAmount, round(solAmount / tokenAmount, 10) as price, marketCapSol from trades order by timestamp desc limit 15;
 
-select mint, timestamp, txType, solAmount, tokenAmount, round(solAmount / tokenAmount, 10) as price, marketCapSol from trades where mint = 'FsPbUSYXyqb71HaksceqXsc1VNcDY7BEE4XMHxumpump' order by timestamp;
+select mint, timestamp, txType, solAmount, tokenAmount, round(solAmount / tokenAmount, 10) as price, marketCapSol from trades where mint = 'EtvH36cn1ACvxzcnoVz273WZ1oiH2jPGHZxjtatnpump' order by timestamp;
 
 
 */

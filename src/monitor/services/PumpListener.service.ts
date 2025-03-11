@@ -30,6 +30,7 @@ export type CreateTokenTxResult = {
     twitter?: string;
     telegram?: string;
     createdAt: Date;
+    updatedAt: Date | null;
     dataSource: string;
 };
 

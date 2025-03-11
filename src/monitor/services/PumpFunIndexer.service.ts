@@ -180,6 +180,7 @@ function convertResultToToken(result: PumpTokenInfo): CreateTokenTxResult {
         twitter: '', // fetch uri to get metadata
         telegram: '', // fetch uri to get metadata
         createdAt: result.createdAt,
+        updatedAt: null,
         dataSource: 'PumpFunIndexer',
     };
 

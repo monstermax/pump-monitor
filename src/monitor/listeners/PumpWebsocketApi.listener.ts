@@ -188,6 +188,7 @@ export class PumpWebsocketApi extends ServiceAbstract {
                         instructionIdx: 0,
                         price: (message.vSolInBondingCurve / message.vTokensInBondingCurve).toFixed(10),
                         createdAt: new Date(0),
+                        updatedAt: null,
                         image: '', // extrait plus tard (en asynchrone) via fetch uri
                         dataSource: 'PumpWebsocketApi',
                     };
