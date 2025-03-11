@@ -7,6 +7,30 @@ import { TransactionResult } from "../pumpfun/pumpfun_create";
 /* ######################################################### */
 
 
+export async function mockedSendSolanaTransaction(txType: 'create' | 'buy' | 'sell'): Promise<TransactionResult> {
+    const results = {
+        create: { success: true, signature: '5yMPE965kyiNXGb3FoDjEzxHKWBd1DmQj765hzfbZXKbsHcSn4CntEz3ZiwevMcrtDTDCsmLwxBVpRvvodAosWr' },
+        buy: { success: true, signature: 'FB4yVvvX6RpNmtm6xqbN2p7UbnfYGrT7KshSEWvgsyzqmG8H4Z5dnEQCEzDtUETNWQZ8jkKVrydaFPTjr9tUB5A' },
+        sell: { success: true, signature: '3JfUutfPiTjpqTF25TZWDLPy5N6DQiFqZjsEbUKnAkTbQBRnSEdHo4rD5Av1Jme9oE9cDmbLR9ELo9nw2EU69Nbr' },
+    }
+
+    if (txType === 'create') {
+        return results.create;
+    }
+
+    if (txType === 'buy') {
+        return results.buy;
+    }
+
+    if (txType === 'sell') {
+        return results.sell;
+    }
+
+    const idx = Math.floor(Math.random() * Object.keys(results).length);
+    return Object.values(results)[idx];
+}
+
+
 export async function sendSolanaTransaction(connection: Connection, wallet: Keypair, tx: VersionedTransaction, options?: { skipPreflight: false }) {
     let success = false;
     let error = undefined;

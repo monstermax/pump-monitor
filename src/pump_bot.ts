@@ -1,34 +1,32 @@
 // pump_bot.ts
 
 import WebSocket from 'ws';
-import { Connection, Keypair, VersionedTransactionResponse } from '@solana/web3.js';
 import base58 from 'bs58';
+import { Connection, Keypair, VersionedTransactionResponse } from '@solana/web3.js';
 
 import { appConfig } from "./env";
-import { getTime, sleep } from './lib/utils/time.util';
+import { sleep } from './lib/utils/time.util';
 import { retryAsync } from './lib/utils/promise.util';
 import { WebsocketHandlers, WsConnection } from './lib/utils/websocket';
 import { asserts } from './lib/utils/asserts';
-import { parsePumpTransaction, PumpTokenInfo, TradeInfo } from './lib/pumpfun/pumpfun_decoder';
 import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/pumpfun_web_api';
-import { getDynamicPriorityFee, sendSolanaTransaction } from './lib/solana/transaction';
-import { formatAddress } from './lib/solana/account';
+import { getDynamicPriorityFee, mockedSendSolanaTransaction, sendSolanaTransaction } from './lib/solana/transaction';
 import { padCenter } from './lib/utils/text.utils';
+import { TransactionResult } from './lib/pumpfun/pumpfun_create';
+import { error, log, warn } from './lib/utils/console';
+import { PumpTokenInfo, TradeInfo, TransactionDecoder } from './lib/pumpfun/pumpfun_tx_decoder';
+import { PumpfunWebsocketApiSubscriptions } from './bot/websocket_subscriptions';
 
 import type { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './monitor/listeners/PumpWebsocketApi.listener';
-import type { BotSettings, FastListenerCreateTokenInput, FastListenerMessage, FastListenerTradeInput, Position, SelectedToken, Status, TokenKpis } from './bot/bot_types';
-import { TransactionResult } from './lib/pumpfun/pumpfun_create';
-import { PumpfunWebsocketApiSubscriptions } from './bot/websocket_subscriptions';
-import { error, log, warn } from './lib/utils/console';
+import type { BotSettings, FastListenerCreateTokenInput, FastListenerTradeInput, Position, SelectedToken, Status, TokenKpis } from './bot/bot_types';
+import { blocksListenerMints, handleSolanaPumpTransactionMessage } from './bot/solana_blocks_listener_client';
+import { fastListenerMints, handleFastListenerPumpTransactionMessage } from './bot/solana_fast_listener_client';
 
 
 /* ######################################################### */
 
 
 const positionsHistory: Position[] = [];
-
-const fastListenerMints = new Map<string, FastListenerCreateTokenInput>;
-const fastListenerTrades = new Map<string, FastListenerTradeInput>;
 
 const botSettings: BotSettings = {
     minSolInWallet: 0.05,
@@ -42,13 +40,16 @@ const botSettings: BotSettings = {
     trailingStop: 80, // 80% => si le prix est plus bas que 80% du max qu'on a connu
 }
 
+const fakeMode = true;
+
 /* ######################################################### */
 
 
 async function main() {
 
-    //const wallet: Keypair = appConfig.solana.WalletPrivateKey ? Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey)) : Keypair.generate();
-    const wallet: Keypair = Keypair.generate();
+    const wallet: Keypair = fakeMode
+        ? Keypair.generate()
+        : Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey));
 
     const bot = new PumpBot(wallet, botSettings);
 
@@ -77,7 +78,7 @@ async function main() {
 
         const wsHandlers: WebsocketHandlers = {
             onconnect: (ws: WebSocket) => void (0),
-            onmessage: (ws: WebSocket, data: WebSocket.Data) => bot.handleSolanaPumpTransactionMessage(ws, data),
+            onmessage: (ws: WebSocket, data: WebSocket.Data) => handleFastListenerPumpTransactionMessage(ws, data),
             onclose: (ws: WebSocket) => log(`⚠️ WebSocket ${connectionName} closed`),
             onerror: (ws: WebSocket, err: Error) => error(`❌ WebSocket ${connectionName} error: ${err.message}`),
             onreconnect: () => log(`📢 Tentative de reconnexion du websocket ${connectionName} ...`),
@@ -86,7 +87,6 @@ async function main() {
         const wsSolana = WsConnection(appConfig.fastListener.url, wsHandlers);
         wsSolana.connect();
     }
-
 
 }
 
@@ -109,6 +109,7 @@ class PumpBot {
     private solBalance: { amount: number, lastUpdated: Date } | null = null;
     private priorityFee: number = 0.0001;
     private slippage: number = 10;
+    private transactionDecoder = new TransactionDecoder;
 
 
     constructor(wallet: Keypair, botSettings?: BotSettings) {
@@ -116,14 +117,22 @@ class PumpBot {
         this.wallet = wallet;
         this.settings = botSettings;
 
-        this.connection.getBalance(this.wallet.publicKey)
-            .then(balanceSol => {
-                this.solBalance = { amount: balanceSol / 1e9, lastUpdated: new Date };
-                log(`PumpBot 📢 => Balance Sol mise à jour : ${this.solBalance.amount.toFixed(9)} SOL`);
-            });
+        if (fakeMode) {
+            this.solBalance = { amount: 10, lastUpdated: new Date };
 
-        getDynamicPriorityFee(this.connection)
-            .then(priorityFee => this.priorityFee = priorityFee)
+        } else {
+            // Récupère la balance SOL du wallet
+            this.connection.getBalance(this.wallet.publicKey)
+                .then(balanceSol => {
+                    this.solBalance = { amount: balanceSol / 1e9, lastUpdated: new Date };
+                    log(`PumpBot 📢 => Balance Sol mise à jour : ${this.solBalance.amount.toFixed(9)} SOL`);
+                });
+
+            // Calcule les priorityFee recommandés
+            getDynamicPriorityFee(this.connection)
+                .then(priorityFee => this.priorityFee = priorityFee);
+        }
+
 
         log(`PumpBot 📢 => Bot démarré sur le wallet ${this.wallet.publicKey.toBase58()}`);
     }
@@ -171,7 +180,7 @@ class PumpBot {
             const message: WsPumpMessage = JSON.parse(data.toString());
 
             if ('txType' in message && message.txType === 'create') {
-                //log(`[API] Received CREATE  transaction for token ${message.mint}`)
+                log(`[API] Received CREATE  transaction for token ${message.mint}`)
                 this.handlePumpCreateTokenMessage(message as WsCreateTokenResult);
             }
 
@@ -203,7 +212,7 @@ class PumpBot {
             getTransaction(this.connection, mintMessage.signature)
                 .then((transaction) => {
                     if (transaction) {
-                        const tokenInfos = parsePumpTransaction(transaction) as PumpTokenInfo;
+                        const tokenInfos = this.transactionDecoder.parsePumpTransactionResponse(transaction) as PumpTokenInfo;
                         //log('tokenInfos:', tokenInfos)
 
                         if (!this.currentPosition) {
@@ -271,40 +280,6 @@ class PumpBot {
 
 
 
-    /** Traite un message recu (created / buy / sell / balance_update) sur le websocket Solana Fast Listener */
-    handleSolanaPumpTransactionMessage(ws: WebSocket | null, data: WebSocket.Data) {
-        if (!ws) return;
-
-        let messages: FastListenerMessage[] = [];
-
-        try {
-            messages = JSON.parse(data.toString());
-
-        } catch (err: any) {
-            warn(`❌ Erreur de décodage du message ${data.toString()}`);
-            return;
-        }
-
-        for (const message of messages) {
-            if (message.type === 'created') {
-                //log(`[FST] Received CREATE  transaction for token ${message.accounts.mint}`)
-                handleSolanaCreateTokenMessage(ws, message as FastListenerCreateTokenInput);
-            }
-
-            if (message.type === 'buy') {
-                //log(`Received BUY     transaction for token ${message.accounts.mint}`)
-                handleSolanaTradeTokenMessage(ws, message as FastListenerTradeInput);
-            }
-
-            if (message.type === 'sell') {
-                //log(`Received SELL   transaction for token ${message.accounts.mint}`)
-                handleSolanaTradeTokenMessage(ws, message as FastListenerTradeInput);
-            }
-        }
-    }
-
-
-
     private async autoBuy(mintMessage: WsCreateTokenResult, tokenInfos: PumpTokenInfo) {
         if (this.status !== 'wait_for_buy') {
             //warn(`autoBuy => ⚠️ Invalide statut ${this.status}. Impossible d'acheter`);
@@ -349,7 +324,7 @@ class PumpBot {
 
             const buySolAmount = checkForBuyResult.amount; // TODO: Math.min(balanceSol, checkForBuyResult.amount)
 
-            if (this.settings?.minSolInWallet && buySolAmount > maxSolAmount) {
+            if (this.settings?.minSolInWallet && buySolAmount > maxSolAmount && ! fakeMode) {
                 warn(`autoBuy => ⚠️ Montant demandé (${buySolAmount}) supérieur à la somme disponible (${maxSolAmount}) => Achat refusé`);
                 return;
             }
@@ -506,24 +481,24 @@ class PumpBot {
             //    : 0;
             */
 
-            const inactivityAge = ((Date.now() - tokenInfos.lastUpdated.getTime()) / 1000).toFixed(1);
-            const mintAge = ((Date.now() - mintDate.getTime()) / 1000).toFixed(1);
-            const buyAge = ((Date.now() - buyDate.getTime()) / 1000).toFixed(1);
-            const positionAge = ((Date.now() - this.currentPosition.timestamp.getTime()) / 1000).toFixed(1);
+            const inactivityAge = (Date.now() - tokenInfos.lastUpdated.getTime()) / 1000;
+            const mintAge = (Date.now() - mintDate.getTime()) / 1000;
+            const buyAge = (Date.now() - buyDate.getTime()) / 1000;
+            const positionAge = (Date.now() - this.currentPosition.timestamp.getTime()) / 1000;
 
             const volumeSol = this.currentToken?.tradesMessages.map(trade => trade.solAmount).reduce((p,c) => p + c, 0);
 
             const { buyPrice, tokenAmount, currentPrice, profit } = this.currentKpis;
 
             const infosLine1 = [
-                `${formatAddress(watchedTokenAddress)}`,
-                `Buy: ${buyPrice} SOL`,
-                `Prix: ${currentPrice} SOL`,
+                //`${formatAddress(watchedTokenAddress)}`,
+                `Buy: ${solToLamp(buyPrice)} LAMP`,
+                `Prix: ${solToLamp(currentPrice)} LAMP`,
                 //`Qté: ${tokenAmount.toFixed(0)}`,
-                `Age: ${mintAge} s.`,
-                `BuyAge: ${buyAge} s.`,
-                `PosAge: ${positionAge} s.`,
-                `Inact.: ${inactivityAge} s.`,
+                `Age: ${formatDuration(mintAge)}`,
+                `BuyAge: ${formatDuration(buyAge)}`,
+                `PosAge: ${formatDuration(positionAge)}`,
+                `Inact.: ${formatDuration(inactivityAge)}`,
                 `Holders: ${this.currentToken.holders.size}`,
                 `Trades: ${this.currentToken?.tradesMessages.length || 0}`,
                 `Vol: ${volumeSol.toFixed(3)} SOL`,
@@ -532,13 +507,13 @@ class PumpBot {
 
             const infosLine2 = [
                 `Profit: ${profit.toFixed(2)}%`,
-                `ratio_3: ${this.currentKpis.lastTrades3BuyPercent.toFixed(1)}%`,
-                `ratio_5: ${this.currentKpis.lastTrades5BuyPercent.toFixed(1)}%`,
-                `min: ${this.currentKpis.minPrice.toFixed(10)}%`,
-                `max: ${this.currentKpis.maxPrice.toFixed(10)}%`,
-                `percentOfAth: ${this.currentKpis.percentOfAth.toFixed(1)}`,
-                `weightedScore: ${JSON.stringify(this.currentKpis.weightedScore)}`,
-                `finalScore: ${this.currentKpis.finalScore}`,
+                `Buy/3: ${this.currentKpis.lastTrades3BuyPercent.toFixed(1)}%`,
+                `Buy/5: ${this.currentKpis.lastTrades5BuyPercent.toFixed(1)}%`,
+                `Min: ${solToLamp(this.currentKpis.minPrice)}%`,
+                `Max: ${solToLamp(this.currentKpis.maxPrice)}%`,
+                `ATH%: ${this.currentKpis.percentOfAth.toFixed(1)}`,
+                `Scores: ${JSON.stringify(this.currentKpis.weightedScore)}`,
+                `Score: ${this.currentKpis.finalScore}`,
             ];
 
             // afficher un message dynamique sur la console : buyPrice | buyMarketCap | currentPrice | currentMarketCap | trades | holders | gain | gainVsMaxGain | mintAge | buyAge | lastActivityAge
@@ -596,26 +571,25 @@ class PumpBot {
 
         log()
         log('#'.repeat(100))
-        log(padCenter(`process d'achat initié ⏳ => token ${tokenInfos.tokenAddress}`, 100))
+        log(padCenter(`⏳ Process d'achat initié => token ${tokenInfos.tokenAddress}`, 100))
         log('#'.repeat(100))
         log()
 
 
-        log(`Achat en cours du token ${this.currentToken.tokenAddress} => step 1️⃣`);
+        log(`1️⃣ Achat en cours du token ${this.currentToken.tokenAddress}`);
 
 
         // 1) créer transaction buy
         const tx = await buildPortalBuyTransaction(this.wallet.publicKey, this.currentToken.tokenAddress, solAmount, this.slippage, this.priorityFee);
         //log('buy tx:', tx);
 
-        log(`Achat en cours du token ${this.currentToken.tokenAddress} => step 2️⃣`);
+        log(`2️⃣ Achat en cours du token ${this.currentToken.tokenAddress}`);
 
 
         // 2) envoyer transaction buy
-        const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
-
-        // test
-        //const txResult: TransactionResult = { success: true, signature: '37TptP3nTLXMrm5QshwRdUZnh3eWi2U99KiifUm3dAzhCNKyxjAG62kYM6Gw7RXPkq2JJvGRNbFroJuZG98WDHUN' }; // DEBUG
+        const txResult: TransactionResult = fakeMode
+            ? await mockedSendSolanaTransaction('buy') // DEBUG/TEST
+            : await sendSolanaTransaction(this.connection, this.wallet, tx);
 
 
         if (!txResult.success || !txResult.signature) {
@@ -637,7 +611,7 @@ class PumpBot {
             throw new Error(`Erreur pendant l'achat. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
 
-        log(`⌛ Attente Transaction: https://solscan.io/tx/` + txResult.signature);
+        log(`⌛ Attente Transaction: 🔗 https://solscan.io/tx/` + txResult.signature);
 
 
         // 3) attendre et récupérer transaction buy
@@ -648,7 +622,7 @@ class PumpBot {
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
         if (!txResponseResult) throw new Error(`Erreur de décodage de la transaction d'achat`);
-        const pumpResult = parsePumpTransaction(txResponseResult) as TradeInfo;
+        const pumpResult = this.transactionDecoder.parsePumpTransactionResponse(txResponseResult) as TradeInfo;
 
         log(`✅ Transaction d'achat décodée => prix d'achat = ${pumpResult.price} SOL`);
 
@@ -680,14 +654,14 @@ class PumpBot {
 
         this.status = 'hold';
 
-        log(`Achat en cours du token ${this.currentToken.tokenAddress} => step 3️⃣`);
+        log(`3️⃣ Achat en cours du token ${this.currentToken.tokenAddress}`);
 
         log()
         log('#'.repeat(100))
-        log(padCenter(`process d'achat terminé 🏁 => token ${this.currentToken.tokenAddress}`, 100))
+        log(padCenter(`🏁 process d'achat terminé => token ${this.currentToken.tokenAddress}`, 100))
         log('#'.repeat(100))
         log()
-        log(`👉 https://pump.fun/coin/${this.currentToken.tokenAddress}`);
+        log(`🔗 https://pump.fun/coin/${this.currentToken.tokenAddress}`);
         log()
 
     }
@@ -722,12 +696,12 @@ class PumpBot {
 
         log();
         log('#'.repeat(100))
-        log(padCenter(`process de vente initié ⏳ => token ${tokenAddress}`, 100))
+        log(padCenter(`⏳ Process de vente initié => token ${tokenAddress}`, 100))
         log('#'.repeat(100))
         log()
 
 
-        log(`Vente en cours du token ${tokenAddress} => step 1️⃣`);
+        log(`1️⃣ Vente en cours du token ${tokenAddress}`);
 
         // TODO
 
@@ -735,14 +709,13 @@ class PumpBot {
         const tx = await buildPortalSellTransaction(this.wallet.publicKey, tokenAddress, tokenAmount, this.slippage, this.priorityFee);
         //log('sell tx:', tx);
 
-        log(`Vente en cours du token ${tokenAddress} => step 2️⃣`);
+        log(`2️⃣ Vente en cours du token ${tokenAddress}`);
 
 
         // 2) envoyer transaction sell
-        const txResult: TransactionResult = await sendSolanaTransaction(this.connection, this.wallet, tx);
-
-        // test
-        //const txResult: TransactionResult = { success: true, signature: '5jpctgtMZuHEMtbD7VdB5MMzJwCnWgM7191M7zpr4RxehP6mNHeYDRYwswEWUxyukZqvSi2TTYn24TiNVFm2PYUH' }; // DEBUG
+        const txResult: TransactionResult = fakeMode
+            ? await mockedSendSolanaTransaction('sell') // DEBUG/TEST
+            : await sendSolanaTransaction(this.connection, this.wallet, tx);
 
 
         if (!txResult.success || !txResult.signature) {
@@ -764,7 +737,7 @@ class PumpBot {
             throw new Error(`Erreur pendant la vente. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
         }
 
-        log(`⌛ Attente Transaction: https://solscan.io/tx/` + txResult.signature);
+        log(`⌛ Attente Transaction: 🔗 https://solscan.io/tx/` + txResult.signature);
 
 
         // 3) attendre et récupérer transaction sell
@@ -775,7 +748,7 @@ class PumpBot {
 
         // 4) Décoder la transaction et récupérer les nouveaux soldes (SOL et tokens)
         if (!txResponseResult) throw new Error(`Erreur de décodage de la transaction de vente`);
-        const pumpResult = parsePumpTransaction(txResponseResult) as TradeInfo;
+        const pumpResult = this.transactionDecoder.parsePumpTransactionResponse(txResponseResult) as TradeInfo;
 
         log(`✅ Transaction de vente décodée => prix de vente = ${pumpResult.price} SOL`);
 
@@ -823,7 +796,7 @@ class PumpBot {
         }
 
 
-        log(`Vente en cours du token ${tokenAddress} => step 3️⃣`);
+        log(`3️⃣ Vente en cours du token ${tokenAddress}`);
 
         const gain = (this.currentPosition.postBalance ?? 0) - this.currentPosition.preBalance;
 
@@ -846,7 +819,7 @@ class PumpBot {
 
         log()
         log('#'.repeat(100))
-        log(padCenter(`process de vente terminé 🏁 => token ${tokenAddress}`, 100))
+        log(padCenter(`🏁 process de vente terminé => token ${tokenAddress}`, 100))
         log('#'.repeat(100))
         log()
         log(); log()
@@ -944,11 +917,11 @@ class PumpBot {
         if (true) {
             const infosLine1 = [
                 //`${formatAddress(mintMessage.mint)}`,
-                `Mint: ${mintMessage.mint}`,
-                `Age: ${tokenAge} s.`,
+                `🆕 Mint: ${mintMessage.mint}`,
+                `Age: ${tokenAge.toFixed(1)} s.`,
                 `Dev: ${devBuySolAmount.toFixed(3)} SOL (${devBuyTokenPercentage.toFixed(2)} %)`,
-                `weightedScore: ${JSON.stringify(weightedScore)}`,
-                `finalScore: ${finalScore}`,
+                `Scores: ${JSON.stringify(weightedScore)}`,
+                `Score: ${finalScore}`,
             ];
 
             log(`${infosLine1.join(' | ')}`);
@@ -964,7 +937,7 @@ class PumpBot {
             const buyAmountRange = buyMaxAmount - buyMinAmount;
             const solAmount = buyMinAmount + scoreNormalized * buyAmountRange / 100;
 
-            if (buyMaxAmount <= buyMinAmount || solAmount <= 0) {
+            if ((buyMaxAmount <= buyMinAmount || solAmount <= 0) && ! fakeMode) {
                 warn(`evaluateTokenForBuy => ⚠️ Balance SOL insuffisante`);
                 process.exit();
                 return { canBuy: false, amount: 0, reason: `Balance SOL insuffisante` }
@@ -1110,26 +1083,6 @@ class PumpBot {
 
 
 
-function handleSolanaCreateTokenMessage(ws: WebSocket, mintInput: FastListenerCreateTokenInput) {
-    //log('FL/mintInput:', mintInput);
-
-    if (!fastListenerMints.has(mintInput.hash)) {
-        fastListenerMints.set(mintInput.hash, mintInput);
-        log(`==> SET MINT TX for token ${mintInput.accounts.mint}`);
-    }
-}
-
-
-function handleSolanaTradeTokenMessage(ws: WebSocket, tradeInput: FastListenerTradeInput) {
-    //log('FL/tradeInput:', tradeInput);
-
-    if (!fastListenerTrades.has(tradeInput.hash)) {
-        fastListenerTrades.set(tradeInput.hash, tradeInput);
-    }
-}
-
-
-
 async function retrieveTransactionWithRpc(connection: Connection | null, signature: string): Promise<VersionedTransactionResponse | null> {
     if (!connection) return null;
 
@@ -1155,9 +1108,28 @@ async function retrieveTransactionWithRpc(connection: Connection | null, signatu
 async function getTransaction(connection: Connection, signature: string) {
     const retriever = () => retrieveTransactionWithRpc(connection, signature);
     //const retriever = () => retrieveMintTransactionResultWithFastListener(signature);
+    //const retriever = () => retrieveTransactionResultWithBlocksListener(signature);
 
     return retriever();
 }
+
+/*
+async function retrieveTransactionResultWithBlocksListener(signature: string, timeout = 15_000): Promise<VersionedTransactionResponse | null> {
+    let transaction: VersionedTransactionResponse | undefined = blocksListenerMints.get(signature)
+    const tsEnd = Date.now() + timeout;
+
+    while (!transaction && Date.now() < tsEnd) {
+        transaction = blocksListenerMints.get(signature)
+        if (transaction) break;
+
+        //warn(`Transaction ${signature} non trouvée dans les ${fastListenerMints.size} transactions de FastListener.`);
+
+        await sleep(50);
+    }
+
+    return transaction ?? null;
+}
+*/
 
 
 async function retrieveMintTransactionResultWithFastListener(signature: string, timeout = 15_000): Promise<FastListenerCreateTokenInput | null> {
@@ -1176,6 +1148,21 @@ async function retrieveMintTransactionResultWithFastListener(signature: string, 
     return mintInput ?? null;
 }
 
+
+function solToLamp(solAmount: number | string | bigint): number {
+    return Number(solAmount) * 1e9;
+}
+
+
+function formatDuration(seconds: number) {
+    if (seconds > 86400) return `${(seconds/86400).toFixed(1)} d.`;
+
+    if (seconds > 3600) return `${(seconds/3600).toFixed(1)} h.`;
+
+    if (seconds > 60) return `${(seconds/60).toFixed(1)} m.`;
+
+    return `${seconds.toFixed(2)} s.`
+}
 
 
 /* ######################################################### */

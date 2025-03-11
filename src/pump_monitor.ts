@@ -1,7 +1,7 @@
 // pump_monitor.ts
 
-import { PumpWebsocketApi } from "./monitor/listeners/PumpWebsocketApi.listener";
 import { Service, ServiceManager } from "./monitor/managers/Service.manager";
+import { PumpWebsocketApi } from "./monitor/listeners/PumpWebsocketApi.listener";
 import { TokenManager } from "./monitor/services/TokenManager.service";
 import { TokenAnalyzer } from "./monitor/services/TokenAnalyzer.service";
 import { Database } from "./monitor/services/Database.service";
@@ -12,6 +12,7 @@ import { SystemMonitor } from "./monitor/services/SystemMonitor.service";
 import { TradingManager } from "./monitor/services/Trading.service";
 import { WebApp } from "./monitor/services/WebApp.service";
 import { PortfolioManager } from "./monitor/services/Portfolio.service";
+import { PumpFunIndexer } from "./monitor/services/PumpFunIndexer.service";
 
 
 /* ######################################################### */
@@ -43,6 +44,7 @@ async function main() {
 
     const dataSources: Service[] = [
         serviceManager.registerService('PumpWebsocketApi', new PumpWebsocketApi(serviceManager)),
+        //serviceManager.registerService('PumpFunIndexer', new PumpFunIndexer(serviceManager)), // bcp plus lent que l'api pumpfun
     ];
 
 
