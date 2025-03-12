@@ -9,7 +9,7 @@ config({ path: `${__dirname}/../.env` });
 
 const RpcList = {
     'solana': process.env.RPC_SOLANA ?? '',
-    'helius': process.env.RPC_SOLANA ?? '',
+    'helius': process.env.RPC_SOLANA ?? '', // FAKE Helius. La flemme de changer le helius hardcodé dans PortfolioManager
     //'helius': process.env.RPC_HELIUS ?? '',
     //'heliusJpp': process.env.RPC_HELIUSJPP ?? '',
     //'quicknode': process.env.RPC_QUICKNODE ?? '',
