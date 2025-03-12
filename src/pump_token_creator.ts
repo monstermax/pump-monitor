@@ -23,7 +23,7 @@ async function main() {
 
     // 0) Configuration
 
-    const tokenMetas = tokensMetasDatabase.PWEASE;
+    const tokenMetas = tokensMetasDatabase.EDOGE;
     const solAmount = 0.5;
 
     const slippage = 5;
@@ -31,7 +31,7 @@ async function main() {
     const useJito = true;
 
     const sells = [
-        { delay: 15, percent: 100},
+        { delay: 2, percent: 100},
         //{ delay: 30, percent: 30},
         //{ delay: 40, percent: 50},
         //{ delay: 60, percent: 100},

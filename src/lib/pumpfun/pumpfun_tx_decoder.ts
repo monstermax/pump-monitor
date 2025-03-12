@@ -10,6 +10,31 @@ import { TradeTransactionResult } from './pumpfun_trading';
 // Note: ce code est utile parce que je ne souhaite pas utiliser la lib @coral-xyz/anchor pour décoder le program pump.fun (avec l'IDL)
 
 
+/*
+    !!! WARNING !!!
+
+Il semblerait que les transactions Jito soient mal décodées
+  => exemple buy+create : https://solscan.io/tx/4GRjCHKGqpQvEtgiris1TwPrXEZRwGZCi7BbHnU96Xw7ToEePGg5dCMSKGvnMWm7pqCBKzQL2JnpnwazGhVdW3qY
+
+Transaction décodée: {
+  type: 'buy',
+  tokenAmount: 17590163.934426,
+  solAmount: 0.002499999,
+  mint: 'BEwZ7ruPd8XyiMKJW1CPMdQEDJmRhpL6ivm8uK5frUJJ',
+  success: true
+}
+
+... or c'etait un buy de 0.5 SOL (et pas 0.0025)
+
+depuis j'ai changé les `log.startsWith('Program log: Instruction:')` en `log.includes('Instruction:')` ... reste à tester
+mais je n'ai pas corrigé les calculs de solAmount
+
+TODO: écouter les transactions en live, comparer le prix (reserve sol / reserve token) aux montants de sol et tokens échangés => si incohérence, patcher
+
+*/
+
+
+
 export interface PumpTokenInfo {
     tokenAddress: string;                 // Adresse du token (se terminant par "pump")
     createdAt: Date;                      // Date de création du token
@@ -212,7 +237,10 @@ export class TransactionDecoder {
         const price = calculatePumpPrice(virtualSolReserves, virtualTokenReserves);
         const marketCapSol = Number(price) * virtualTokenReserves;
 
-        const instructionIdx = txData.meta?.logMessages?.filter(log => log.startsWith('Program log: Instruction: ')).findIndex(log => log.startsWith('Program log: Instruction: Create')) ?? 0;
+        //const instructionIdx = txData.meta?.logMessages?.filter(log => log.startsWith('Program log: Instruction: ')).findIndex(log => log.startsWith('Program log: Instruction: Create')) ?? 0;
+
+        // test en retirant le prefix "Program log: " ... afin de voir si on peut capter les sous-instructions, utilisées par Jito
+        const instructionIdx = txData.meta?.logMessages?.filter(log => log.includes('Instruction: ')).findIndex(log => log.includes('Instruction: Create')) ?? 0;
 
         // Extraire les informations du token
         const tokenInfo: PumpTokenInfo = {
@@ -287,6 +315,7 @@ export class TransactionDecoder {
             feeAmount = (txData.meta.fee || 0) / 1e9;
 
             solAmount = preSolBalance - postSolBalance - feeAmount; // déduction des frais de transaction pour le calcul du trade (hors taxe). les frais de pump.fun sont par contre inclus
+            // TODO: prendre en compte les frais jito (program FAdo9NCw1ssek6Z6yeWzWjhLVsr8uiCwcWNUnKgzTnHe ?)
         }
 
 
@@ -339,7 +368,11 @@ export class TransactionDecoder {
 
         const traderPostPercentToken = 100 * buyerPostTokenAmount / (buyerPostTokenAmount + virtualTokenReserves);
 
-        const instructionIdx = txData.meta?.logMessages?.filter(log => log.startsWith('Program log: Instruction: ')).findIndex(log => log.startsWith('Program log: Instruction: Buy')) ?? 0;
+
+        //const instructionIdx = txData.meta?.logMessages?.filter(log => log.startsWith('Program log: Instruction: ')).findIndex(log => log.startsWith('Program log: Instruction: Buy')) ?? 0;
+
+        // test en retirant le prefix "Program log: " ... afin de voir si on peut capter les sous-instructions, utilisées par Jito
+        const instructionIdx = txData.meta?.logMessages?.filter(log => log.includes('Instruction: ')).findIndex(log => log.includes('Instruction: Buy')) ?? 0;
 
 
         // Créer un objet pour stocker les informations de l'achat
@@ -402,6 +435,7 @@ export class TransactionDecoder {
         }
 
         const solAmount = sellerPostSolBalance - sellerPreSolBalance + feeAmount; // déduction des frais de transaction pour le calcul du trade (hors taxe). les frais de pump.fun sont par contre inclus
+        // TODO: prendre en compte les frais jito (program FAdo9NCw1ssek6Z6yeWzWjhLVsr8uiCwcWNUnKgzTnHe ?)
 
 
         // Calculer les tokens vendus
@@ -447,7 +481,10 @@ export class TransactionDecoder {
         //const traderPostPercentToken_OLD = 100 * tokenAmount / (tokenAmount + virtualTokenReserves);
         const traderPostPercentToken = 100 * sellerPostTokenAmount / (sellerPostTokenAmount + virtualTokenReserves);
 
-        const instructionIdx = txData.meta?.logMessages?.filter(log => log.startsWith('Program log: Instruction: ')).findIndex(log => log.startsWith('Program log: Instruction: Sell')) ?? 0;
+        //const instructionIdx = txData.meta?.logMessages?.filter(log => log.startsWith('Program log: Instruction: ')).findIndex(log => log.startsWith('Program log: Instruction: Sell')) ?? 0;
+
+        // test en retirant le prefix "Program log: " ... afin de voir si on peut capter les sous-instructions, utilisées par Jito
+        const instructionIdx = txData.meta?.logMessages?.filter(log => log.includes('Instruction: ')).findIndex(log => log.includes('Instruction: Sell')) ?? 0;
 
 
         // Créer un objet pour stocker les informations de la vente
@@ -491,6 +528,8 @@ export function detectInstructionType(txData: ParsedTransactionWithMeta | Versio
         return PumpInstructionType.UNKNOWN;
     }
 
+    // test en retirant le prefix "Program log: " ... afin de voir si on peut capter les sous-instructions, utilisées par Jito
+
     // Vérifier les logs pour déterminer le type d'instruction
     const logMessages = txData.meta.logMessages;
 
@@ -498,11 +537,13 @@ export function detectInstructionType(txData: ParsedTransactionWithMeta | Versio
         return PumpInstructionType.Create;
     }
 
-    if (logMessages.some(log => log.startsWith('Program log: Instruction: Buy'))) {
+    //if (logMessages.some(log => log.startsWith('Program log: Instruction: Buy'))) {
+    if (logMessages.some(log => log.includes('Instruction: Buy'))) {
         return PumpInstructionType.Buy;
     }
 
-    if (logMessages.some(log => log.startsWith('Program log: Instruction: Sell'))) {
+    //if (logMessages.some(log => log.startsWith('Program log: Instruction: Sell'))) {
+    if (logMessages.some(log => log.includes('Instruction: Sell'))) {
         return PumpInstructionType.Sell;
     }
 

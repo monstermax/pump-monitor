@@ -193,7 +193,18 @@ export async function createAndBuyWithMultipleWallets(
     try {
         // 1. Préparer les métadonnées et obtenir l'URI
         const tokenMetadataFormData = new FormData();
-        tokenMetadataFormData.append("file", await tokenMetadata.file());
+
+        //const file: Blob = await tokenMetadata.file();
+        //tokenMetadataFormData.append("file", file);
+
+        const arrayBuffer = await (await tokenMetadata.file()).arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        tokenMetadataFormData.append("file", buffer, {
+            filename: 'image.png',
+            contentType: 'image/png' // Ajustez selon le type de fichier
+        });
+
         tokenMetadataFormData.append("name", tokenMetadata.name);
         tokenMetadataFormData.append("symbol", tokenMetadata.symbol);
         tokenMetadataFormData.append("description", tokenMetadata.description);

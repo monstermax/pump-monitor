@@ -48,7 +48,7 @@ export async function createTokenMetadata(create: CreateTokenMetadata) {
 
     let formData = new FormData();
 
-    const arrayBuffer = await create.file.arrayBuffer();
+    const arrayBuffer = await (await create.file()).arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     formData.append("file", buffer, {
@@ -91,7 +91,9 @@ export async function createTokenMetadata(create: CreateTokenMetadata) {
         }
 
         try {
-            return JSON.parse(responseText);
+            const metadataResponseJSON = JSON.parse(responseText);
+            return metadataResponseJSON;
+
         } catch (e) {
             throw new Error(`Invalid JSON response: ${responseText}`);
         }
