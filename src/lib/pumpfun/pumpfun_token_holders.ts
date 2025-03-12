@@ -43,10 +43,16 @@ export async function getTokenHolders(connection: Connection, tokenAddress: stri
         }
     }
 
-
     holders.forEach(holder => holder.percentage = 100 * holder.amount / totalSupply);
 
 
-    return holders;
+    const sortedHolders = Object.fromEntries(
+        [...holders.entries()]
+            .sort((a, b) => {
+                return b[1].percentage - a[1].percentage
+            })
+    );
+
+    return sortedHolders;
 }
 
