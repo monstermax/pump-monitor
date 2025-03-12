@@ -1,6 +1,6 @@
 // Trading.service.ts
 
-import { Commitment, Connection, Finality, ParsedTransactionWithMeta, PublicKey, VersionedTransactionResponse } from "@solana/web3.js";
+import { Commitment, Connection, Finality, ParsedTransactionWithMeta, PublicKey } from "@solana/web3.js";
 
 import { Token } from "../models/Token.model";
 import { ServiceAbstract } from "./abstract.service";
