@@ -20,10 +20,10 @@ import { buidVersionedMessageFromResponse } from "../../lib/pumpfun/pumpfun_tx_t
 
 export class PumpFunIndexer extends ServiceAbstract {
     private connectionName = "Solana RPC WebSocket";
-    private rpcUrl = appConfig.solana.rpc.chainstack;
     private wsSolana: ReturnType<typeof WsConnection> | null = null;
-    private transactions = new Map<string, VersionedTransactionResponse>;
+    //private transactions = new Map<string, VersionedTransactionResponse>;
     private mints = new Set<string>;
+    private rpcUrl = appConfig.solana.rpc.chainstack;
 
 
     start() {
@@ -102,7 +102,7 @@ export class PumpFunIndexer extends ServiceAbstract {
 
 
             if (true) {
-                const tsStart = Date.now();
+                //const tsStart = Date.now();
 
                 transactions.forEach(txData => {
                     const txResponse: VersionedTransactionResponse = {
@@ -115,8 +115,8 @@ export class PumpFunIndexer extends ServiceAbstract {
                         blockTime,
                     } as VersionedTransactionResponse;
 
-                    const result: PumpTokenInfo | TradeInfo | SendTransactionError | null = decoder.parsePumpTransactionResponse(txResponse);
 
+                    const result: PumpTokenInfo | TradeInfo | SendTransactionError | null = decoder.parsePumpTransactionResponse(txResponse);
 
                     if (result) {
                         if ('tokenName' in result) {
@@ -141,17 +141,17 @@ export class PumpFunIndexer extends ServiceAbstract {
                     }
                 });
 
-                const duration = Date.now() - tsStart;
-
+                //const duration = Date.now() - tsStart;
                 //this.log(`Block ${blockHeight} decoded => ${transactions.length} pumpfun transactions found (in ${duration} ms)`)
             }
 
 
             if (false) {
-                transactionsFormatted.forEach(tx => {
-                    this.emit('pump_transaction', tx);
-                    this.transactions.set(tx.transaction.signatures[0], tx);
-                });
+                //this.emit('pump_transactions', transactionsFormatted);
+
+                //transactionsFormatted.forEach(tx => {
+                //    this.transactions.set(tx.transaction.signatures[0], tx);
+                //});
             }
 
         }

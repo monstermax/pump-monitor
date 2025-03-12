@@ -40,18 +40,6 @@ const ignoredHoldings: string[] = [
 ];
 
 
-const portfolioRpcs = [
-    //appConfig.solana.rpc.chainstack, // getParsedTokenAccountsByOwner => Method requires plan upgrade
-    appConfig.solana.rpc.helius,
-    appConfig.solana.rpc.alchemy,
-    appConfig.solana.rpc.heliusJpp,
-    appConfig.solana.rpc.quicknode,
-    appConfig.solana.rpc.shyft,
-    appConfig.solana.rpc.nownodes,
-    appConfig.solana.rpc.solana,
-];
-
-
 /* ######################################################### */
 
 
@@ -60,8 +48,6 @@ export class PortfolioManager extends ServiceAbstract {
     private balanceSOL: number | null = null;
     private portfolioSettings: PortfolioSettings | null = null;
     private portfolioStats: PortfolioStats | null = null;
-
-    //private connection: Connection = new MagicConnection({ rpcs: portfolioRpcs, maxRpcs: 3, maxRetries: 15, timeout: 30_000 });
     private connection: Connection = new Connection(appConfig.solana.rpc.helius, { commitment: 'confirmed' });
 
 

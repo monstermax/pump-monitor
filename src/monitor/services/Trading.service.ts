@@ -46,8 +46,6 @@ export class TradingManager extends ServiceAbstract {
     private pendingBuys = 0;
     private pendingSells = 0;
     private lastTradeSlot = 0;
-
-    //private connection: Connection = new Connection(appConfig.solana.rpc.chainstack, { commitment: 'confirmed' });
     private connection: Connection = new Connection(appConfig.solana.rpc.helius, { commitment: 'confirmed' });
 
 
