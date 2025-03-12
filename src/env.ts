@@ -9,22 +9,21 @@ config({ path: `${__dirname}/../.env` });
 
 const RpcList = {
     'solana': process.env.RPC_SOLANA ?? '',
-    'helius': process.env.RPC_SOLANA ?? '', // FAKE Helius. La flemme de changer le helius hardcodé dans PortfolioManager
-    //'helius': process.env.RPC_HELIUS ?? '',
-    //'heliusJpp': process.env.RPC_HELIUSJPP ?? '',
-    //'quicknode': process.env.RPC_QUICKNODE ?? '',
-    //'alchemy': process.env.RPC_ALCHEMY ?? '',
-    //'drpc': process.env.RPC_DRPC ?? '',
-    //'chainstack': process.env.RPC_CHAINSTACK ?? '',
-    //'shyft': process.env.RPC_SHYFT ?? '',
-    //'nownodes': process.env.RPC_NOWNODES ?? '',
-    //'rockx': process.env.RPC_ROCKX ?? '', // slow
-    //'syndica': process.env.RPC_SYNDICA ?? '', // very slow
-    //'lavanet': process.env.RPC_LAVANET ?? '', // very slow
-    //'omnia': process.env.RPC_OMNIA ?? '', // very slow
-    //'getblock': process.env.RPC_GETBLOCK ?? '',
-    //'tatum': process.env.RPC_TATUM ?? '',
-    //'ankr': process.env.RPC_ANKR ?? '',
+    'helius': process.env.RPC_HELIUS ?? process.env.RPC_SOLANA ?? '',
+    'heliusJpp': process.env.RPC_HELIUSJPP ?? process.env.RPC_SOLANA ?? '',
+    'quicknode': process.env.RPC_QUICKNODE ?? process.env.RPC_SOLANA ?? '',
+    'alchemy': process.env.RPC_ALCHEMY ?? process.env.RPC_SOLANA ?? '',
+    'drpc': process.env.RPC_DRPC ?? process.env.RPC_SOLANA ?? '',
+    'chainstack': process.env.RPC_CHAINSTACK ?? process.env.RPC_SOLANA ?? '',
+    'shyft': process.env.RPC_SHYFT ?? process.env.RPC_SOLANA ?? '',
+    'nownodes': process.env.RPC_NOWNODES ?? process.env.RPC_SOLANA ?? '',
+    'getblock': process.env.RPC_GETBLOCK ?? process.env.RPC_SOLANA ?? '',
+    'rockx': process.env.RPC_ROCKX ?? '', // slow
+    'syndica': process.env.RPC_SYNDICA ?? '', // very slow
+    'lavanet': process.env.RPC_LAVANET ?? '', // very slow
+    'omnia': process.env.RPC_OMNIA ?? '', // very slow
+    //'tatum': process.env.RPC_TATUM ?? '', // KO
+    //'ankr': process.env.RPC_ANKR ?? '', // KO
 };
 
 
