@@ -136,3 +136,42 @@ console.log("SECOND PRIX CALCULE POUR LANCER LACHAT ${currentPrice2}");
     }
 }
 
+
+async function sendJitoTip() {
+    try {
+        const randomTipAccount = new PublicKey(jitoTipAccounts[Math.floor(Math.random() * jitoTipAccounts.length)]);
+        const tipAmountLamports = 0.0007 * 1e9; // 0.0005 SOL
+
+        const tipInstruction = SystemProgram.transfer({
+            fromPubkey: walletKeypair.publicKey,
+            toPubkey: randomTipAccount,
+            lamports: tipAmountLamports,
+        });
+
+        const transaction = new Transaction().add(tipInstruction);
+        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        transaction.feePayer = walletKeypair.publicKey;
+
+        const signature = await connection.sendTransaction(transaction, [walletKeypair], { skipPreflight: true });
+        console.log(`✅ Tip envoyé: https://solscan.io/tx/${signature}`);
+        // ✅ Attendre la confirmation du Tip avant de continuer
+        await connection.confirmTransaction(signature, 'confirmed');
+        console.log("✅ Tip Jito confirmé dans un bloc !");
+        return signature;
+    } catch (error) {
+        console.error('❌ Erreur en envoyant le tip Jito:', error);
+    }
+}
+
+// Ajoute un supplément de paiement pour augmenter les chances d'accélérer la transaction
+async function getPriorityFee() {
+    try {
+        const priorityFee = await connection.getRecentPrioritizationFees();
+        return priorityFee ? priorityFee[0] * 1.2 : 10000; // 20% de plus pour garantir l'inclusion rapide
+    } catch (error) {
+        console.warn("⚠️ Impossible de récupérer le Priority Fee, utilisation par défaut");
+        return 10000; // Valeur par défaut
+    }
+}
+
+
