@@ -27,6 +27,9 @@ export class PumpFunIndexer extends ServiceAbstract {
 
 
     start() {
+        if (this.status !== 'stopped') return;
+        super.start();
+
         const wsHandlers: WebsocketHandlers = {
             onconnect: (ws: WebSocket) => this.subscribePumpBlocks(ws),
             onmessage: (ws: WebSocket, data: WebSocket.Data) => this.handleSolanaPumpTransactionMessage(ws, data),
@@ -37,12 +40,20 @@ export class PumpFunIndexer extends ServiceAbstract {
 
         this.wsSolana = WsConnection(this.rpcUrl, wsHandlers);
         this.wsSolana.connect();
+
+        super.started();
     }
 
 
     stop() {
-        if (! this.wsSolana) return;
-        this.wsSolana?.close();
+        if (this.status !== 'started') return;
+        super.stop();
+
+        if (this.wsSolana) {
+            this.wsSolana.close();
+        }
+
+        super.stopped();
     }
 
 

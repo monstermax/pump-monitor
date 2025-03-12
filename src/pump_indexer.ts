@@ -29,9 +29,6 @@ export interface BlockNotification {
 }
 
 
-export type Block = ParsedBlockResponse;
-
-
 /* ######################################################### */
 
 
@@ -79,7 +76,6 @@ async function main() {
     indexer.start();
 
 }
-
 
 
 
