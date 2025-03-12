@@ -1,18 +1,17 @@
 // pumpfun_buy.ts
 
-import { Commitment, Connection, Finality, Keypair, PublicKey, VersionedTransactionResponse, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import { Commitment, Connection, Finality, Keypair, PublicKey, VersionedTransactionResponse, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY, SendTransactionError } from "@solana/web3.js";
 import { createAssociatedTokenAccountInstruction, getAccount, getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-import { sleep } from "../utils/time.util";
-import { FEE_RECIPIENT, getGlobalAccountPubKey, getTokenBondingCurveAccount, PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
-import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx, simulateTransaction } from "./pumpfun_tx";
-import { getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
-import { calculateWithSlippageBuy } from "./pumpfun_create_buy_sell";
-import { PriorityFee, TransactionError, TransactionResult } from "./pumpfun_create";
-
+import { sleep } from "../../utils/time.util";
+import { PriorityFee, sendTransaction, TransactionResult } from "../../solana/solana_tx_sender";
+import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, FEE_RECIPIENT, PUMPFUN_PROGRAM_ID } from "../pumpfun_config";
+import { simulateTransaction } from "../pumpfun_tx_simulation";
+import { getBondingCurvePDA, getTokenBondingCurveAccount } from "../pumpfun_bondingcurve_account";
+import { getGlobalAccountPDA } from "../pumpfun_global_account";
+import { calculateWithSlippageBuy } from "../pumpfun_trading";
 
 /* ######################################################### */
-
 
 
 export async function pumpFunBuy(
@@ -25,6 +24,7 @@ export async function pumpFunBuy(
     commitment: Commitment = DEFAULT_COMMITMENT,
     finality: Finality = DEFAULT_FINALITY
 ): Promise<TransactionResult> {
+
     try {
         console.log(`🔄 Préparation de l'achat de token ${mint.toBase58()} pour ${Number(buyAmountSol) / 1e9} SOL...`);
 
@@ -60,7 +60,8 @@ export async function pumpFunBuy(
 
         // 3) Envoi de la transaction
         console.log("Buy simulation successful, sending transaction...");
-        let buyResult = await sendTx(
+
+        let buyResult = await sendTransaction(
             connection,
             buyTx,
             buyer.publicKey,
@@ -71,9 +72,11 @@ export async function pumpFunBuy(
         );
 
 
+
         // 4) Analyse du résultat
         if (buyResult.success) {
             console.log(`✅ Transaction d'achat réussie: ${buyResult.signature}`);
+
         } else {
             console.error(`❌ La transaction d'achat a échoué:`, buyResult.error);
         }
@@ -91,10 +94,7 @@ export async function pumpFunBuy(
             ? `Erreur de simulation: ${errorMessage}`
             : `Erreur d'achat: ${errorMessage}`;
 
-        const error: TransactionError = new Error(errMessage);
-        error.transactionError = new Error;
-        error.transactionLogs = [];
-        error.transactionMessage = '';
+        const error = new SendTransactionError({ action: 'send', signature: '', transactionMessage: errMessage, logs: [] });
 
         return {
             success: false,
@@ -193,7 +193,8 @@ export async function getBuyInstructions(
     feeRecipient: PublicKey,
     amount: bigint,
     solAmount: bigint,
-    commitment: Commitment = DEFAULT_COMMITMENT
+    commitment: Commitment = DEFAULT_COMMITMENT,
+    skipSimulation = false
 ) {
     try {
         // Inférer le programme de token pour ce mint
@@ -278,10 +279,12 @@ export async function getBuyInstructions(
         transaction.add(buyInstruction);
         console.log(`📝 Transaction d'achat préparée avec ${transaction.instructions.length} instructions`);
 
-        // Simuler la transaction avant de la renvoyer
-        const simuResult = await simulateTransaction(connection, transaction, buyer, commitment);
-        if (!simuResult) {
-            console.error(`❌ La simulation a échoué, mais on continue pour déboguer`);
+        if (!skipSimulation) {
+            // Simuler la transaction avant de la renvoyer
+            const simuResult = await simulateTransaction(connection, transaction, buyer, commitment);
+            if (!simuResult) {
+                console.error(`❌ La simulation a échoué, mais on continue pour déboguer`);
+            }
         }
 
         return transaction;
@@ -330,7 +333,7 @@ function preparePumpFunBuyInstruction(
     ]);
 
 
-    const globalAccountPubKey = getGlobalAccountPubKey();
+    const globalAccountPubKey = getGlobalAccountPDA();
 
     //const globalAccountPubKey = PublicKey.findProgramAddressSync(
     //    [Buffer.from("global")],

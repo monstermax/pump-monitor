@@ -1,18 +1,58 @@
 // pumpfun_bondingcurve_account.ts
 
-import { Commitment, Connection, PublicKey } from "@solana/web3.js";
+import { AccountInfo, Commitment, Connection, PublicKey } from "@solana/web3.js";
 import { struct, bool, u64, Layout } from "@coral-xyz/borsh";
 
 import { appConfig } from "../../env";
+import { BONDING_CURVE_SEED, DEFAULT_COMMITMENT, PUMPFUN_PROGRAM_ID } from "./pumpfun_config";
 
 
 /* ######################################################### */
 
-export const DEFAULT_COMMITMENT: Commitment = "finalized";
-export const BONDING_CURVE_SEED = "bonding-curve";
+
+export async function getBondingCurveAccount(connection: Connection, bondingCurvePDA: PublicKey, commitment: Commitment = DEFAULT_COMMITMENT): Promise<BondingCurveAccount | null> {
+    const bondingCurveAccount: AccountInfo<Buffer<ArrayBufferLike>> | null = await connection.getAccountInfo(bondingCurvePDA, commitment)
+        .catch((err: any) => {
+            console.warn(`Erreur de récupération du compte "bonding-curve" ${bondingCurvePDA} => ${connection.rpcEndpoint} : ${err.message}`);
+            return null;
+        })
+
+    if (!bondingCurveAccount) {
+        return null;
+    }
+
+    const bondingCurveAccountDecoded: BondingCurveAccount = BondingCurveAccount.fromBuffer(bondingCurveAccount!.data);
+    return bondingCurveAccountDecoded;
+}
 
 
-/* ######################################################### */
+export function getBondingCurvePDA(mint: PublicKey) {
+    const bondingCurvePDA =  PublicKey.findProgramAddressSync(
+        [Buffer.from(BONDING_CURVE_SEED), mint.toBuffer()],
+        new PublicKey(PUMPFUN_PROGRAM_ID)
+    )[0];
+
+    return bondingCurvePDA;
+}
+
+
+
+export async function getTokenBondingCurveAccount(connection: Connection, mint: PublicKey, commitment: Commitment = DEFAULT_COMMITMENT) {
+    const tokenAccount = await connection.getAccountInfo(
+        getBondingCurvePDA(mint),
+        commitment
+    );
+
+    if (!tokenAccount) {
+        return null;
+    }
+
+    const bondingCurveAccountDecoded = BondingCurveAccount.fromBuffer(tokenAccount!.data);
+    return bondingCurveAccountDecoded;
+}
+
+
+
 
 
 export class BondingCurveAccount {
@@ -147,43 +187,4 @@ export class BondingCurveAccount {
         );
     }
 }
-
-
-/*
-export async function getBondingCurveAccount(connection: Connection, mint: PublicKey, commitment: Commitment = DEFAULT_COMMITMENT) {
-    const tokenAccount = await connection.getAccountInfo(
-        getBondingCurvePDA(mint),
-        commitment
-    );
-    if (!tokenAccount) {
-        return null;
-    }
-    return BondingCurveAccount.fromBuffer(tokenAccount!.data);
-}
-*/
-
-
-export async function getBondingCurveAccount(connection: Connection, bondingCurve: PublicKey, commitment: Commitment = DEFAULT_COMMITMENT) {
-    const bondingCurveAccount = await connection.getAccountInfo(bondingCurve, commitment)
-        .catch((err: any) => {
-            console.warn(`Erreur de connexion au RPC Solana ${connection.rpcEndpoint} : ${err.message}`);
-        })
-
-    if (!bondingCurveAccount) {
-        return null;
-    }
-    const bondingCurveAccountDecoded = BondingCurveAccount.fromBuffer(bondingCurveAccount!.data);
-    return bondingCurveAccountDecoded;
-}
-
-
-
-
-export function getBondingCurvePDA(mint: PublicKey) {
-    return PublicKey.findProgramAddressSync(
-        [Buffer.from(BONDING_CURVE_SEED), mint.toBuffer()],
-        new PublicKey(appConfig.pumpfun.PUMP_PROGRAM)
-    )[0];
-}
-
 

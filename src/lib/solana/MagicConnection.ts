@@ -365,29 +365,3 @@ if (require.main === module) {
 }
 
 
-
-
-
-function log(message: string) {
-    console.log(`${now()} | ${message}`)
-}
-
-
-function now(date?: Date) {
-    const dateFormatted = getUsDateTime(date);
-    return dateFormatted.replace(' ', ' | ');
-}
-
-
-function getUsDateTime(date?: Date) {
-    if (date === null) return '';
-    date = date ?? new Date;
-    return `${getUsDate(date)} ${date.toLocaleTimeString('fr-FR', { timeStyle: 'medium' })}`;
-}
-
-
-function getUsDate(date?: Date) {
-    if (date === null) return '';
-    date = date ?? new Date;
-    return date.toLocaleDateString('fr-FR', { dateStyle: 'short' }).split('/').reverse().join('-');
-}

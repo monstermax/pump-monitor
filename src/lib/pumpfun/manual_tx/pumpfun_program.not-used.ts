@@ -3,14 +3,14 @@
 import { Commitment, Connection, PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-import { PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
-import { DEFAULT_COMMITMENT } from "./pumpfun_tx";
+import { DEFAULT_COMMITMENT, PUMPFUN_PROGRAM_ID } from "../pumpfun_config";
+
 
 /* ######################################################### */
 
 
 // Créez une fonction utilitaire pour détecter le type de programme Token
-async function getTokenProgramId(connection: Connection, mint: PublicKey): Promise<PublicKey> {
+async function getTokenProgramId_v1(connection: Connection, mint: PublicKey): Promise<PublicKey> {
     try {
         // Get account info first to check the owner
         const info = await connection.getAccountInfo(mint, "confirmed");
@@ -54,7 +54,7 @@ async function getTokenProgramId(connection: Connection, mint: PublicKey): Promi
 
 
 
-async function inferTokenProgram(
+async function getTokenProgramId_v2(
     connection: Connection,
     mint: PublicKey,
     commitment: Commitment = DEFAULT_COMMITMENT

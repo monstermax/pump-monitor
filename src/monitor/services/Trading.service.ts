@@ -7,12 +7,14 @@ import { ServiceAbstract } from "./abstract.service";
 import { appConfig } from "../../env";
 import { getTokenBalance } from "../../lib/solana/account";
 import { SellRecommandation } from "./Portfolio.service";
-import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../../lib/pumpfun/pumpfun_web_api";
-import { decodeTradeTransactionFromLogs, getParsedTransactionWithRetries, TradeTransactionResult } from "../../lib/pumpfun/pumpfun_tx";
-import { pumpFunBuy } from "../../lib/pumpfun/pumpfun_buy";
-import { pumpFunSell } from "../../lib/pumpfun/pumpfun_sell";
+import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../../lib/pumpfun/portal_tx/pumpfun_web_api";
 import { OpportunityAnalysis } from "../analyzers/opportunity-analyzer";
-import { PriorityFee, TransactionResult } from "../../lib/pumpfun/pumpfun_create";
+import { PriorityFee, TransactionResult } from "../../lib/solana/solana_tx_sender";
+import { fetchParsedTransactionWithRetries } from "../../lib/pumpfun/pumpfun_tx_tools";
+import { decodeTradeTransactionFromLogs } from "../../lib/pumpfun/pumpfun_tx_decoder";
+import { TradeTransactionResult } from "../../lib/pumpfun/pumpfun_trading";
+import { pumpFunSell } from "../../lib/pumpfun/manual_tx/pumpfun_sell";
+import { pumpFunBuy } from "../../lib/pumpfun/manual_tx/pumpfun_buy";
 
 /* ######################################################### */
 
@@ -162,7 +164,7 @@ export class TradingManager extends ServiceAbstract {
                 this.log(`Tentative ${attempt} d'obtenir la transaction d'achat (${elapsed}ms écoulées)...`);
             };
 
-            const parsedTransaction: ParsedTransactionWithMeta | null = await getParsedTransactionWithRetries(this.connection, transactionResult.signature, onRetry);
+            const parsedTransaction: ParsedTransactionWithMeta | null = await fetchParsedTransactionWithRetries(this.connection, transactionResult.signature, onRetry);
 
             if (! parsedTransaction) {
                 throw new Error(`Transaction non trouvée`);
@@ -309,7 +311,7 @@ export class TradingManager extends ServiceAbstract {
                 this.log(`Tentative ${attempt} d'obtenir la transaction de vente (${elapsed}ms écoulées)...`);
             };
 
-            const parsedTransaction: ParsedTransactionWithMeta | null = await getParsedTransactionWithRetries(this.connection, transactionResult.signature, onRetry);
+            const parsedTransaction: ParsedTransactionWithMeta | null = await fetchParsedTransactionWithRetries(this.connection, transactionResult.signature, onRetry);
 
             if (! parsedTransaction) {
                 throw new Error(`Transaction non trouvée`);

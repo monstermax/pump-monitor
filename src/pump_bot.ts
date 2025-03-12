@@ -2,25 +2,24 @@
 
 import WebSocket from 'ws';
 import base58 from 'bs58';
-import { Connection, Keypair, VersionedTransactionResponse } from '@solana/web3.js';
+import { Connection, Keypair, SendTransactionError, VersionedTransactionResponse } from '@solana/web3.js';
 
 import { appConfig } from "./env";
 import { sleep } from './lib/utils/time.util';
 import { retryAsync } from './lib/utils/promise.util';
+import { padCenter } from './lib/utils/text.utils';
+import { error, log, warn } from './lib/utils/console';
 import { WebsocketHandlers, WsConnection } from './lib/utils/websocket';
 import { asserts } from './lib/utils/asserts';
-import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/pumpfun_web_api';
-import { getDynamicPriorityFee, mockedSendSolanaTransaction, sendSolanaTransaction } from './lib/solana/transaction';
-import { padCenter } from './lib/utils/text.utils';
-import { TransactionResult } from './lib/pumpfun/pumpfun_create';
-import { error, log, warn } from './lib/utils/console';
+import { mockedSendSolanaTransaction, sendVersionedTransaction, TransactionResult } from './lib/solana/solana_tx_sender';
+import { getDynamicPriorityFee } from './lib/solana/solana_tx_tools';
+import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/portal_tx/pumpfun_web_api';
 import { PumpTokenInfo, TradeInfo, TransactionDecoder } from './lib/pumpfun/pumpfun_tx_decoder';
 import { PumpfunWebsocketApiSubscriptions } from './bot/websocket_subscriptions';
+import { fastListenerMints, handleFastListenerPumpTransactionMessage } from './bot/solana_fast_listener_client';
 
 import type { WsCreateTokenResult, WsPumpMessage, WsTokenTradeResult } from './monitor/listeners/PumpWebsocketApi.listener';
-import type { BotSettings, FastListenerCreateTokenInput, FastListenerTradeInput, Position, SelectedToken, Status, TokenKpis } from './bot/bot_types';
-import { blocksListenerMints, handleSolanaPumpTransactionMessage } from './bot/solana_blocks_listener_client';
-import { fastListenerMints, handleFastListenerPumpTransactionMessage } from './bot/solana_fast_listener_client';
+import type { BotSettings, FastListenerCreateTokenInput, Position, SelectedToken, Status, TokenKpis } from './bot/bot_types';
 
 
 /* ######################################################### */
@@ -586,10 +585,13 @@ class PumpBot {
         log(`2️⃣ Achat en cours du token ${this.currentToken.tokenAddress}`);
 
 
+
         // 2) envoyer transaction buy
+        tx.sign([this.wallet]);
+
         const txResult: TransactionResult = fakeMode
             ? await mockedSendSolanaTransaction('buy') // DEBUG/TEST
-            : await sendSolanaTransaction(this.connection, this.wallet, tx);
+            : await sendVersionedTransaction(this.connection, tx);
 
 
         if (!txResult.success || !txResult.signature) {
@@ -598,17 +600,19 @@ class PumpBot {
                 warn(`Erreur pendant l'achat`);
 
                 if (txResult.error) {
-                    warn(` - message: ${txResult.error.transactionMessage}`);
+                    warn(` - message: ${txResult.error.message}`);
 
-                    txResult.error.transactionLogs?.forEach(log => {
-                        warn(` - log: ${log}`);
-                    })
+                    if (txResult.error instanceof SendTransactionError) {
+                        txResult.error.logs?.forEach(log => {
+                            warn(` - log: ${log}`);
+                        })
+                    }
 
                     //log('ERR', txResult.error.transactionError)
                 }
             }
 
-            throw new Error(`Erreur pendant l'achat. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
+            throw new Error(`Erreur pendant l'achat. ${txResult.error?.message ?? txResult.error?.message ?? ''}`);
         }
 
         log(`⌛ Attente Transaction: 🔗 https://solscan.io/tx/` + txResult.signature);
@@ -713,9 +717,11 @@ class PumpBot {
 
 
         // 2) envoyer transaction sell
+        tx.sign([this.wallet]);
+
         const txResult: TransactionResult = fakeMode
             ? await mockedSendSolanaTransaction('sell') // DEBUG/TEST
-            : await sendSolanaTransaction(this.connection, this.wallet, tx);
+            : await sendVersionedTransaction(this.connection, tx);
 
 
         if (!txResult.success || !txResult.signature) {
@@ -724,17 +730,19 @@ class PumpBot {
                 warn(`Erreur pendant la vente`);
 
                 if (txResult.error) {
-                    warn(` - message: ${txResult.error.transactionMessage}`);
+                    warn(` - message: ${txResult.error.message}`);
 
-                    txResult.error.transactionLogs?.forEach(log => {
-                        warn(` - log: ${log}`);
-                    })
+                    if (txResult.error instanceof SendTransactionError) {
+                        txResult.error.logs?.forEach(log => {
+                            warn(` - log: ${log}`);
+                        })
+                    }
 
                     //log('ERR', txResult.error.transactionError)
                 }
             }
 
-            throw new Error(`Erreur pendant la vente. ${txResult.error?.transactionMessage ?? txResult.error?.message ?? ''}`);
+            throw new Error(`Erreur pendant la vente. ${txResult.error?.message ?? txResult.error?.message ?? ''}`);
         }
 
         log(`⌛ Attente Transaction: 🔗 https://solscan.io/tx/` + txResult.signature);

@@ -12,6 +12,7 @@ import { MagicConnection } from "../../lib/solana/MagicConnection";
 import { getTokenBalance } from "../../lib/solana/account";
 import base58 from "bs58";
 import { MIN_BUY_SOL_AMOUNT, MIN_SELL_SOL_VALUE, MIN_SELL_TOKEN_AMOUNT } from "./Trading.service";
+import { PUMPFUN_TOKEN_PROGRAM_ID } from "../../lib/pumpfun/pumpfun_config";
 
 /* ######################################################### */
 
@@ -251,7 +252,7 @@ export class PortfolioManager extends ServiceAbstract {
 
             //const response2 = await this.connection.getTokenAccountsByOwner(
             //    this.wallet.publicKey,
-            //    { programId: new PublicKey(appConfig.pumpfun.PUMP_TOKEN) }, // Token Program ID
+            //    { programId: new PublicKey(PUMPFUN_TOKEN_PROGRAM_ID) }, // Token Program ID
             //    { minContextSlot: this.trading.getLastTradeSlot() }
             //);
 
@@ -265,7 +266,7 @@ export class PortfolioManager extends ServiceAbstract {
             // Récupérer les tokens du wallet (on-chain)
             const response = await this.connection.getParsedTokenAccountsByOwner(
                 this.wallet.publicKey,
-                { programId: new PublicKey(appConfig.pumpfun.PUMP_TOKEN) } // Token Program ID
+                { programId: new PublicKey(PUMPFUN_TOKEN_PROGRAM_ID) } // Token Program ID
             );
 
             this.log(`Found ${response.value.length} token accounts`);

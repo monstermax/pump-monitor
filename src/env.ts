@@ -50,12 +50,6 @@ export const appConfig: AppConfig = {
         //URL: 'wss://frontend-api-v3.pump.fun/socket.io/?EIO=4&transport=websocket',
         pingInterval: 15_000,  // 15 secondes
     },
-    pumpfun: {
-        PUMP_PROGRAM: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
-        PUMP_MINT: 'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',
-        PUMP_TOKEN: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-        PUMP_TOKEN_2022: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
-    },
     analysis: {
         milestonesUSD: [
             10_000,  // 10k
@@ -116,12 +110,6 @@ export type AppConfig = {
     websocketFrontend: {
         url: string,
         pingInterval: number,  // ms
-    };
-    pumpfun: {
-        PUMP_PROGRAM: string,
-        PUMP_MINT: string,
-        PUMP_TOKEN: string,
-        PUMP_TOKEN_2022: string,
     };
     analysis: {
         milestonesUSD: number[];

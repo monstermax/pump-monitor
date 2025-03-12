@@ -3,12 +3,13 @@
 import { Commitment, Connection, Finality, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-import { getTokenBondingCurveAccount, PUMPFUN_PROGRAM_ID } from "./pumpfun_create_buy_sell";
-import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx, simulateTransaction } from "./pumpfun_tx";
-import { getGlobalAccount } from "./pumpfun_global_account";
-import { calculateWithSlippageSell } from "./pumpfun_create_buy_sell";
-import { getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
-import { PriorityFee, TransactionResult } from "./pumpfun_create";
+import { PriorityFee, sendTransaction, TransactionResult } from "../../solana/solana_tx_sender";
+import { simulateTransaction } from "../pumpfun_tx_simulation";
+import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, PUMPFUN_PROGRAM_ID } from "../pumpfun_config";
+import { getGlobalAccount } from "../pumpfun_global_account";
+import { getBondingCurvePDA, getTokenBondingCurveAccount } from "../pumpfun_bondingcurve_account";
+import { calculateWithSlippageSell } from "../pumpfun_trading";
+
 
 
 /* ######################################################### */
@@ -54,7 +55,9 @@ export async function pumpFunSell(
 
 
     // 3) Envoi de la transaction
-    let sellResult = await sendTx(
+    console.log("Sell simulation successful, sending transaction...");
+
+    let sellResult = await sendTransaction(
         connection,
         sellTx,
         seller.publicKey,
@@ -98,6 +101,7 @@ async function getSellTransactionByTokenAmount(
     }
 
     let globalAccount = await getGlobalAccount(connection, commitment);
+    if (! globalAccount) throw new Error(`globalAccount manquant`);
 
     let minSolOutput = bondingCurveAccount.getSellPrice(
         sellTokenAmount,

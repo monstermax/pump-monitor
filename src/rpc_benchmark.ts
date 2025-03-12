@@ -1,13 +1,15 @@
 
 import { Connection } from "@solana/web3.js";
 
-import { appConfig } from "../../env";
+import { appConfig } from "./env";
 
 /* ######################################################### */
 
 
 async function main() {
-    const promises = Object.entries(appConfig.solana.rpc).map(entry => {
+    const rpcsList: Record<string, string> = appConfig.solana.rpc;
+
+    const promises = Object.entries(rpcsList).map(entry => {
         const rpcName = entry[0];
         const rpcUrl = entry[1];
         const tsStart = Date.now();

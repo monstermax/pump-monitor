@@ -6,11 +6,13 @@ import { SendTransactionError, VersionedTransactionResponse } from "@solana/web3
 import { appConfig } from "../../env";
 import { error, log } from "../../lib/utils/console";
 import { WebsocketHandlers, WsConnection } from "../../lib/utils/websocket";
-import { PUMPFUN_PROGRAM_ID } from "../../lib/pumpfun/pumpfun_create_buy_sell";
-import { PumpTokenInfo, TradeInfo, TransactionDecoder, versionedMessageFromResponse } from "../../lib/pumpfun/pumpfun_tx_decoder";
+
+import { PumpTokenInfo, TradeInfo, TransactionDecoder } from "../../lib/pumpfun/pumpfun_tx_decoder";
 import { ServiceAbstract } from "./abstract.service";
 import { BlockNotification } from "../../pump_indexer";
 import { CreateTokenTxResult, TokenTradeTxResult } from "./PumpListener.service";
+import { PUMPFUN_PROGRAM_ID } from "../../lib/pumpfun/pumpfun_config";
+import { buidVersionedMessageFromResponse } from "../../lib/pumpfun/pumpfun_tx_tools";
 
 
 /* ######################################################### */
@@ -89,11 +91,11 @@ export class PumpFunIndexer extends ServiceAbstract {
                     ...txData,
                     transaction: {
                         ...txData.transaction,
-                        message: versionedMessageFromResponse(txData.version ?? 'legacy', txData.transaction.message as any)
+                        message: buidVersionedMessageFromResponse(txData.version ?? 'legacy', txData.transaction.message as any)
                     },
                     slot,
                     blockTime,
-                } as unknown as VersionedTransactionResponse;
+                } as VersionedTransactionResponse;
 
                 return txResponse;
             });
@@ -107,11 +109,11 @@ export class PumpFunIndexer extends ServiceAbstract {
                         ...txData,
                         transaction: {
                             ...txData.transaction,
-                            message: versionedMessageFromResponse(txData.version ?? 'legacy', txData.transaction.message as any)
+                            message: buidVersionedMessageFromResponse(txData.version ?? 'legacy', txData.transaction.message as any)
                         },
                         slot,
                         blockTime,
-                    } as unknown as VersionedTransactionResponse;
+                    } as VersionedTransactionResponse;
 
                     const result: PumpTokenInfo | TradeInfo | SendTransactionError | null = decoder.parsePumpTransactionResponse(txResponse);
 

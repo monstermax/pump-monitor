@@ -1,17 +1,42 @@
 // pumpfun_global_account.ts
 
-import { Commitment, Connection, PublicKey } from "@solana/web3.js";
+import { AccountInfo, Commitment, Connection, PublicKey } from "@solana/web3.js";
 import { struct, bool, u64, publicKey, Layout } from "@coral-xyz/borsh";
 
 import { appConfig } from "../../env";
+import { DEFAULT_COMMITMENT, GLOBAL_ACCOUNT_SEED, PUMPFUN_PROGRAM_ID } from "./pumpfun_config";
 
 
 /* ######################################################### */
 
-export const DEFAULT_COMMITMENT: Commitment = "finalized";
-export const GLOBAL_ACCOUNT_SEED = "global";
 
-/* ######################################################### */
+export async function getGlobalAccount(connection: Connection, commitment: Commitment = DEFAULT_COMMITMENT): Promise<GlobalAccount | null> {
+    const globalAccountPDA: PublicKey = getGlobalAccountPDA();
+
+    const globalAccount: AccountInfo<Buffer<ArrayBufferLike>> | null = await connection.getAccountInfo(globalAccountPDA, commitment)
+        .catch((err: any) => {
+            console.warn(`Erreur de récupération du compte "global" => ${connection.rpcEndpoint} : ${err.message}`);
+            return null;
+        })
+
+    if (!globalAccount) {
+        return null;
+    }
+
+    const globalAccountDecoded: GlobalAccount = GlobalAccount.fromBuffer(globalAccount!.data);
+    return globalAccountDecoded;
+}
+
+
+export function getGlobalAccountPDA(): PublicKey {
+    const globalAccountPDA: PublicKey = PublicKey.findProgramAddressSync(
+        [Buffer.from(GLOBAL_ACCOUNT_SEED)],
+        new PublicKey(PUMPFUN_PROGRAM_ID)
+    )[0];
+
+    return globalAccountPDA;
+}
+
 
 
 export class GlobalAccount {
@@ -89,17 +114,3 @@ export class GlobalAccount {
     }
 }
 
-
-export async function getGlobalAccount(connection: Connection, commitment: Commitment = DEFAULT_COMMITMENT) {
-    const [globalAccountPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from(GLOBAL_ACCOUNT_SEED)],
-        new PublicKey(appConfig.pumpfun.PUMP_PROGRAM)
-    );
-
-    const tokenAccount = await connection.getAccountInfo(
-        globalAccountPDA,
-        commitment
-    );
-
-    return GlobalAccount.fromBuffer(tokenAccount!.data);
-}

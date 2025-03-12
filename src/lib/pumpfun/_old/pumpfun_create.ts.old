@@ -9,24 +9,8 @@ import { getBuyInstructions } from "./pumpfun_buy";
 import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, sendTx } from "./pumpfun_tx";
 import { getGlobalAccount } from "./pumpfun_global_account";
 import { getBondingCurvePDA } from "./pumpfun_bondingcurve_account";
+import { sendVersionedTransaction } from "../solana/transaction";
 
-
-/* ######################################################### */
-
-export type TransactionError = Error & { transactionError?: Error, transactionLogs?: string[], transactionMessage?: string };
-
-export type TransactionResult = {
-    signature?: string;
-    error?: TransactionError;
-    results?: VersionedTransactionResponse;
-    success: boolean;
-};
-
-
-export type PriorityFee = {
-    unitLimit: number;
-    unitPrice: number;
-};
 
 
 
@@ -44,8 +28,12 @@ export async function pumpFunCreateAndBuy(
     commitment: Commitment = DEFAULT_COMMITMENT,
     finality: Finality = DEFAULT_FINALITY
 ): Promise<TransactionResult> {
+
+    // Upload des Metadata sur IPFS
     let tokenMetadata = await createTokenMetadata(newTokenMetadata);
 
+
+    // Construction de l'instruction "create"
     let createTx = await getCreateInstructions(
         connection,
         creator.publicKey,
@@ -65,6 +53,8 @@ export async function pumpFunCreateAndBuy(
             slippageBasisPoints
         );
 
+
+        // Construction de l'instruction "buy"
         const buyTx = await getBuyInstructions(
             connection,
             creator.publicKey,
@@ -77,6 +67,8 @@ export async function pumpFunCreateAndBuy(
         newTx.add(buyTx);
     }
 
+
+    // Construction de la transaction finale
     let createResults = await sendTx(
         connection,
         newTx,
@@ -86,6 +78,9 @@ export async function pumpFunCreateAndBuy(
         commitment,
         finality
     );
+
+    //const createResults: TransactionResult = await sendVersionedTransaction(connection, creator, newTx); // requiert typeof newTx = VersionedTransaction
+
     return createResults;
 }
 
@@ -170,119 +165,66 @@ export function preparePumpFunCreateInstruction(
     uri: string,
     tokenProgramId: PublicKey = TOKEN_PROGRAM_ID
 ): TransactionInstruction {
+    console.log(`🔧 Préparation manuelle de l'instruction de création de token...`);
+    console.log(`🏷️ Nom: ${name}, Symbole: ${symbol}`);
+    console.log(`🔑 Utilisation du programme de token: ${tokenProgramId.toBase58()}`);
 
-
-    if (1) throw new Error(`preparePumpFunCreateInstruction not implemented`);
-
-
+    // Identifiant de l'instruction create
     const INSTRUCTION_IDENTIFIER = Buffer.from([24, 30, 200, 40, 5, 28, 7, 119]);
 
-    /*
-    const nameBuffer = Buffer.alloc(4);
-    nameBuffer.writeUInt32LE(Buffer.from(name), 0);
+    // Encoder les chaînes en tampons
+    const nameBuffer = Buffer.from(name);
+    const nameLength = Buffer.alloc(4);
+    nameLength.writeUInt32LE(nameBuffer.length, 0);
 
-    const symbolBuffer = Buffer.alloc(4);
-    symbolBuffer.writeUInt32LE(Buffer.from(symbol), 0);
+    const symbolBuffer = Buffer.from(symbol);
+    const symbolLength = Buffer.alloc(4);
+    symbolLength.writeUInt32LE(symbolBuffer.length, 0);
 
-    const uriBuffer = Buffer.alloc(4);
-    uriBuffer.writeUInt32LE(Buffer.from(uri), 0);
-
-    */
+    const uriBuffer = Buffer.from(uri);
+    const uriLength = Buffer.alloc(4);
+    uriLength.writeUInt32LE(uriBuffer.length, 0);
 
     // Concaténer les données de l'instruction
     const instructionData = Buffer.concat([
         INSTRUCTION_IDENTIFIER,
-        //nameBuffer,
-        //symbolBuffer,
-        //uriBuffer,
+        nameLength,
+        nameBuffer,
+        symbolLength,
+        symbolBuffer,
+        uriLength,
+        uriBuffer
     ]);
 
-
     const globalAccountPubKey = getGlobalAccountPubKey();
-
-    //const globalAccountPubKey = PublicKey.findProgramAddressSync(
-    //    [Buffer.from("global")],
-    //    new PublicKey(PUMPFUN_PROGRAM_ID)
-    //)[0];
+    const bondingCurvePDA = getBondingCurvePDA(mint.publicKey);
 
     console.log(`🌐 Compte global: ${globalAccountPubKey.toBase58()}`);
+    console.log(`🔄 Bonding curve PDA: ${bondingCurvePDA.toBase58()}`);
 
-
-    // Liste des comptes requis
+    // Liste des comptes requis - basée sur la transaction réussie
     const keys = [
-        { pubkey: globalAccountPubKey, isSigner: false, isWritable: false },
+        { pubkey: mint.publicKey, isSigner: true, isWritable: true },
         { pubkey: feeRecipient, isSigner: false, isWritable: true },
-        { pubkey: mint.publicKey, isSigner: false, isWritable: true },
-        { pubkey: metadataPDA, isSigner: false, isWritable: true },
+        { pubkey: bondingCurvePDA, isSigner: false, isWritable: true },
         { pubkey: associatedBondingCurve, isSigner: false, isWritable: true },
+        { pubkey: metadataPDA, isSigner: false, isWritable: true },
         { pubkey: creator, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // Pour les bonding curves
-        { pubkey: tokenProgramId, isSigner: false, isWritable: false },   // Pour les opérations de token de l'utilisateur
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: tokenProgramId, isSigner: false, isWritable: false },
+        { pubkey: new PublicKey(MPL_TOKEN_METADATA_PROGRAM_ID), isSigner: false, isWritable: false },
         { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+        { pubkey: globalAccountPubKey, isSigner: false, isWritable: false }
     ];
 
     console.log(`📑 Liste des comptes préparée avec ${keys.length} comptes`);
 
     return new TransactionInstruction({
         keys,
-        programId: new PublicKey(PUMPFUN_PROGRAM_ID), // Adresse du programme Pump.fun
+        programId: new PublicKey(PUMPFUN_PROGRAM_ID),
         data: instructionData
     });
 }
 
-
-
-export async function createTokenMetadata(create: CreateTokenMetadata) {
-    // Validate file
-    if (!(create.file instanceof Blob)) {
-        throw new Error('File must be a Blob or File object');
-    }
-
-    let formData = new FormData();
-    formData.append("file", create.file, 'image.png'); // Add filename
-    formData.append("name", create.name);
-    formData.append("symbol", create.symbol);
-    formData.append("description", create.description);
-    formData.append("twitter", create.twitter || "");
-    formData.append("telegram", create.telegram || "");
-    formData.append("website", create.website || "");
-    formData.append("showName", "true");
-
-    try {
-        const request = await fetch("https://pump.fun/api/ipfs", {
-            method: "POST",
-            headers: {
-                'Accept': 'application/json',
-            },
-            body: formData,
-            credentials: 'same-origin'
-        });
-
-        if (request.status === 500) {
-            // Try to get more error details
-            const errorText = await request.text();
-            throw new Error(`Server error (500): ${errorText || 'No error details available'}`);
-        }
-
-        if (!request.ok) {
-            throw new Error(`HTTP error! status: ${request.status}`);
-        }
-
-        const responseText = await request.text();
-        if (!responseText) {
-            throw new Error('Empty response received from server');
-        }
-
-        try {
-            return JSON.parse(responseText);
-        } catch (e) {
-            throw new Error(`Invalid JSON response: ${responseText}`);
-        }
-
-    } catch (err: any) {
-        console.error('Error in createTokenMetadata:', err);
-        throw err;
-    }
-}
 
