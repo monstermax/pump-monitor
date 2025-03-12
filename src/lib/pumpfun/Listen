@@ -1,3 +1,5 @@
+async function listenForNewTokens() {
+
     console.log("Démarrage écoute WebSocket blockchain (nouvelles créations uniquement)...");
 
     const subscriptionId =connection.onLogs(
