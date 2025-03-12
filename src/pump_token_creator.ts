@@ -6,12 +6,13 @@ import base58 from "bs58";
 import { appConfig } from "./env";
 import { log, warn } from "./lib/utils/console";
 import { sleep } from "./lib/utils/time.util";
-import { sendPortalCreateAndBuyTransaction, sendPortalSellTransaction } from "./lib/pumpfun/portal_tx/pumpfun_web_api";
+import { sendPortalCreateAndBuyTransaction, sendPortalSellTransaction } from "./lib/pumpfun/portal_tx/pumpfun_portal_api";
 import { TransactionResult } from "./lib/solana/solana_tx_sender";
 import { fetchParsedTransactionWithRetries } from "./lib/pumpfun/pumpfun_tx_tools";
 import { decodeTradeTransactionFromLogs } from "./lib/pumpfun/pumpfun_tx_decoder";
 import { TradeTransactionResult } from "./lib/pumpfun/pumpfun_trading";
 import * as tokensMetasDatabase from "./creator/tokens_metadata.database";
+import { createAndBuyWithMultipleWallets } from "./lib/pumpfun/portal_tx/pumpfun_portal_api_jito";
 
 
 
@@ -23,16 +24,18 @@ async function main() {
     // 0) Configuration
 
     const tokenMetas = tokensMetasDatabase.PWEASE;
-    const solAmount = 1.5;
+    const solAmount = 0.5;
 
     const slippage = 5;
     const portalPriorityFee = 0.0001;
+    const useJito = true;
 
     const sells = [
-        { delay: 30, percent: 30},
+        { delay: 15, percent: 100},
+        //{ delay: 30, percent: 30},
         //{ delay: 40, percent: 50},
         //{ delay: 60, percent: 100},
-        { delay: 120, percent: 100},
+        //{ delay: 120, percent: 100},
     ];
 
 
@@ -42,7 +45,10 @@ async function main() {
     const mintWallet = Keypair.generate();
     const connection = new Connection(appConfig.solana.rpc.chainstack);
 
-    const createAndBuyResult: TransactionResult = await sendPortalCreateAndBuyTransaction(connection, creatorWallet, mintWallet, tokenMetas, solAmount, slippage, portalPriorityFee)
+    const createAndBuyResult: TransactionResult = useJito
+        ? await createAndBuyWithMultipleWallets(creatorWallet, [], [], mintWallet, tokenMetas, solAmount, slippage, portalPriorityFee)
+        : await sendPortalCreateAndBuyTransaction(connection, creatorWallet, mintWallet, tokenMetas, solAmount, slippage, portalPriorityFee);
+
     log('result:', createAndBuyResult)
 
 
@@ -98,6 +104,8 @@ async function main() {
 
         tokenAmount = remainingTokenAmount * sell.percent / 100;
         remainingTokenAmount -= tokenAmount;
+
+        // TODO: implémenter vente via jito
 
         const sellResult: TransactionResult = await sendPortalSellTransaction(connection, creatorWallet, decodedInstruction.mint, tokenAmount, slippage, portalPriorityFee)
         console.log(`Vente #${sellIdx} confirmée`);

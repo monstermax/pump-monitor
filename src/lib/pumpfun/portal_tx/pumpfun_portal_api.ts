@@ -1,4 +1,4 @@
-// pumpfun_web_api.ts
+// pumpfun_portal_api.ts
 
 import fetch from 'node-fetch';
 import FormData from 'form-data';

@@ -7,7 +7,7 @@ import { ServiceAbstract } from "./abstract.service";
 import { appConfig } from "../../env";
 import { getTokenBalance } from "../../lib/solana/account";
 import { SellRecommandation } from "./Portfolio.service";
-import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../../lib/pumpfun/portal_tx/pumpfun_web_api";
+import { sendPortalBuyTransaction, sendPortalSellTransaction } from "../../lib/pumpfun/portal_tx/pumpfun_portal_api";
 import { OpportunityAnalysis } from "../analyzers/opportunity-analyzer";
 import { PriorityFee, TransactionResult } from "../../lib/solana/solana_tx_sender";
 import { fetchParsedTransactionWithRetries } from "../../lib/pumpfun/pumpfun_tx_tools";

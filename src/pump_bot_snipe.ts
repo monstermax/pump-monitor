@@ -13,7 +13,7 @@ import { WebsocketHandlers, WsConnection } from './lib/utils/websocket';
 import { asserts } from './lib/utils/asserts';
 import { mockedSendSolanaTransaction, sendVersionedTransaction, TransactionResult } from './lib/solana/solana_tx_sender';
 import { getDynamicPriorityFee } from './lib/solana/solana_tx_tools';
-import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/portal_tx/pumpfun_web_api';
+import { buildPortalBuyTransaction, buildPortalSellTransaction } from './lib/pumpfun/portal_tx/pumpfun_portal_api';
 import { PumpTokenInfo, TradeInfo, TransactionDecoder } from './lib/pumpfun/pumpfun_tx_decoder';
 import { PumpfunWebsocketApiSubscriptions } from './bot/websocket_subscriptions';
 import { fastListenerMints, handleFastListenerPumpTransactionMessage } from './bot/solana_fast_listener_client';
