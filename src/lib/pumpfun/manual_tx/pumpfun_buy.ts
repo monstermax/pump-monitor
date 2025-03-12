@@ -14,6 +14,9 @@ import { calculateWithSlippageBuy } from "../pumpfun_trading";
 /* ######################################################### */
 
 
+// WARNING : code non fonctionnel. a debuger => les transactions échouent (probleme de programId)
+
+
 export async function pumpFunBuy(
     connection: Connection,
     buyer: Keypair,

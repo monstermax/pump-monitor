@@ -10,9 +10,10 @@ import { getGlobalAccount } from "../pumpfun_global_account";
 import { getBondingCurvePDA, getTokenBondingCurveAccount } from "../pumpfun_bondingcurve_account";
 import { calculateWithSlippageSell } from "../pumpfun_trading";
 
-
-
 /* ######################################################### */
+
+
+// WARNING : code non fonctionnel. a debuger => les transactions échouent (probleme de programId)
 
 
 

@@ -14,8 +14,6 @@ import { calculateWithSlippageBuy } from "../pumpfun_trading";
 import { createTokenMetadata, CreateTokenMetadata } from "../pumpfun_token_metadata";
 
 
-
-
 /* ######################################################### */
 
 export type TransactionError = Error & { transactionError?: Error, transactionLogs?: string[], transactionMessage?: string };
@@ -29,6 +27,8 @@ export type TokenCreationMetadata = {
 
 /* ######################################################### */
 
+
+// WARNING : code non fonctionnel. a debuger => les transactions échouent (probleme de programId)
 
 
 export async function pumpFunCreateAndBuy(
