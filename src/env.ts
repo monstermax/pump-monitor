@@ -9,14 +9,15 @@ config({ path: `${__dirname}/../.env` });
 
 const RpcList = {
     'solana': process.env.RPC_SOLANA ?? '',
-    'helius': process.env.RPC_HELIUS ?? '',
-    'heliusJpp': process.env.RPC_HELIUSJPP ?? '',
-    'quicknode': process.env.RPC_QUICKNODE ?? '',
-    'alchemy': process.env.RPC_ALCHEMY ?? '',
-    'drpc': process.env.RPC_DRPC ?? '',
-    'chainstack': process.env.RPC_CHAINSTACK ?? '',
-    'shyft': process.env.RPC_SHYFT ?? '',
-    'nownodes': process.env.RPC_NOWNODES ?? '',
+    'helius': process.env.RPC_SOLANA ?? '',
+    //'helius': process.env.RPC_HELIUS ?? '',
+    //'heliusJpp': process.env.RPC_HELIUSJPP ?? '',
+    //'quicknode': process.env.RPC_QUICKNODE ?? '',
+    //'alchemy': process.env.RPC_ALCHEMY ?? '',
+    //'drpc': process.env.RPC_DRPC ?? '',
+    //'chainstack': process.env.RPC_CHAINSTACK ?? '',
+    //'shyft': process.env.RPC_SHYFT ?? '',
+    //'nownodes': process.env.RPC_NOWNODES ?? '',
     //'rockx': process.env.RPC_ROCKX ?? '', // slow
     //'syndica': process.env.RPC_SYNDICA ?? '', // very slow
     //'lavanet': process.env.RPC_LAVANET ?? '', // very slow
@@ -29,7 +30,7 @@ const RpcList = {
 
 export const appConfig: AppConfig = {
     mongodb: {
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+        uri: process.env.MONGODB_URI || '', //'mongodb://localhost:27017',
         dbName: 'pump_monitor_v2',
     },
     solana: {

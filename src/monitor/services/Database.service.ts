@@ -320,6 +320,11 @@ export class Database extends ServiceAbstract {
     // Méthodes pour la synchronisation avec MongoDB
 
     async connectToMongo() {
+        if (! appConfig.mongodb.uri) {
+            // Tanpis, on fait sans MongoDB
+            return;
+        }
+
         if (!this.mongoClient) {
             this.mongoClient = new MongoClient(appConfig.mongodb.uri, {
                 connectTimeoutMS: 30000,

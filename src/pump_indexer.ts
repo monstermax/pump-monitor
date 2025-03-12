@@ -37,10 +37,10 @@ async function main() {
     log(`Indexer démarré`);
 
     const db = new MySQLClient({
-        host: 'localhost',
-        user: 'pyramidial',
-        password: 'pyramidial',
-        database: 'pumpfun_indexer'
+        host: 'localhost', // TODO: process.env.DB_HOST
+        user: 'pumpfun', // TODO: process.env.DB_USER
+        password: 'pumpfun', // TODO: process.env.DB_PASSWORD
+        database: 'pumpfun_indexer', // TODO: process.env.DB_DB
     });
 
 
