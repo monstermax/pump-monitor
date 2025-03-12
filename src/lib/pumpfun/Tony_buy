@@ -1,0 +1,138 @@
+async function buyWithWallet(token, amountSol, slippage = 0.5, tipAmount = 0.0005) {
+    try {
+       // console.log(`Achat de ${tokenMint} pour ${amountSol} SOL`);
+        // Vérifier le solde du wallet avant d'acheter
+        const walletBalance = await connection.getBalance(walletKeypair.publicKey);
+        const requiredLamports = amountSol * LAMPORTS_PER_SOL;
+        if (walletBalance < requiredLamports) {
+            throw new Error(`Solde insuffisant. Nécessaire: ${requiredLamports}, Disponible: ${walletBalance}`);
+        }
+
+        // Récupération du dernier blockhash
+        console.log("Récupération du dernier blockhash...");
+        const { blockhash } = await connection.getLatestBlockhash("confirmed");
+        const priorityFee = await getPriorityFee();
+
+        // Création de l’ATA pour le nouveau token (car tu achètes toujours un nouveau memecoin)
+        console.log("Création de l'ATA...");
+        const associatedTokenAccount = await getAssociatedTokenAddress(
+            new PublicKey(token.mint),
+            walletKeypair.publicKey,
+            false,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_ACCOUNT_PROGRAM
+        );
+        const createATAInstruction = createAssociatedTokenAccountInstruction(
+            walletKeypair.publicKey,
+            associatedTokenAccount,
+            walletKeypair.publicKey,
+            new PublicKey(token.mint),
+            TOKEN_PROGRAM_ID
+        );
+
+        // Sélectionner un compte Tip Jito random
+        const randomTipAccount = new PublicKey(jitoTipAccounts[Math.floor(Math.random() * jitoTipAccounts.length)]);
+
+        // Instruction pour Tip Jito
+        const tipInstruction = SystemProgram.transfer({
+            fromPubkey: walletKeypair.publicKey,
+            toPubkey: randomTipAccount,
+            lamports: tipAmount * LAMPORTS_PER_SOL,
+        });
+
+        // Récupération des détails du token pour calculer l'achat
+   const tokenPriceSol = await getOnChainTokenPrice(new PublicKey(token.bonding_curve));
+        console.log("PREMIER PRIX CALCULE POUR LANCER LACHAT ${tokenPriceSol}");
+
+        const tokenAmount = amountSol / tokenPriceSol;
+        const amountLamports = Math.ceil(amountSol * LAMPORTS_PER_SOL);
+        const maxAmountLamports = Math.ceil(amountLamports * (1 + slippage));
+
+        // Création des buffers pour l'achat
+        const discriminator = Buffer.alloc(8);
+        discriminator.writeBigUInt64LE(BigInt('16927863322537952870'));
+
+        const tokenAmountBuffer = Buffer.alloc(8);
+        tokenAmountBuffer.writeBigUInt64LE(BigInt(Math.floor(tokenAmount * 10 ** TOKEN_DECIMALS)));
+
+        const maxAmountLamportsBuffer = Buffer.alloc(8);
+        maxAmountLamportsBuffer.writeBigUInt64LE(BigInt(maxAmountLamports));
+
+        // Création de la transaction d'achat
+        const data = Buffer.concat([discriminator, tokenAmountBuffer, maxAmountLamportsBuffer]);
+
+        const accounts = [
+            { pubkey: PUMP_GLOBAL, isSigner: false, isWritable: false },
+            { pubkey: PUMP_FEE, isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(token.mint), isSigner: false, isWritable: false },
+            { pubkey: new PublicKey(token.bonding_curve), isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(token.associated_bonding_curve), isSigner: false, isWritable: true },
+            { pubkey: associatedTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: walletKeypair.publicKey, isSigner: true, isWritable: true },
+            { pubkey: SYSTEM_PROGRAM, isSigner: false, isWritable: false },
+            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: RENT_PROGRAM, isSigner: false, isWritable: false },
+            { pubkey: PUMP_EVENT_AUTHORITY, isSigner: false, isWritable: false },
+            { pubkey: PUMP_PROGRAM, isSigner: false, isWritable: false },
+        ];
+
+        const buyInstruction = new TransactionInstruction({
+            keys: accounts,
+            programId: PUMP_PROGRAM,
+            data: data,
+        });
+
+
+        // Création de la transaction unique avec toutes les étapes en une seule TX
+        console.log("Construction de la transaction MEV...");
+        let transaction = new Transaction()
+   .add(tipInstruction) // Tip Jito pour inclusion ultra-rapide
+            .add(createATAInstruction) // Création de l'ATA
+            .add(buyInstruction); // Achat
+
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = walletKeypair.publicKey;
+        transaction.feeCalculator = { priorityFeeLamports: priorityFee };
+        transaction.sign(walletKeypair);
+
+        // Envoi via Jito Bundle pour inclusion immédiate
+        console.log("Envoi de la transaction via Jito Bundle...");
+        const jitoSignature = await jitoConnection.sendRawTransaction(transaction.serialize(), {
+            skipPreflight: true,
+            preflightCommitment: "processed",
+            commitment: "confirmed",
+        });
+
+         //Mise à jour du prix sur la blockchain directement
+        // Mise à jour du prix sur la blockchain directement
+        let currentPrice2 = await getOnChainTokenPrice(new PublicKey(token.bonding_curve));
+console.log("SECOND PRIX CALCULE POUR LANCER LACHAT ${currentPrice2}");
+        if (!currentPrice2) {
+            console.warn("Impossible de récupérer le prix mis à jour On-Chain, utilisation du prix sur pump.fun.");
+            currentPrice2 = 0;
+        }
+
+       // console.log(`Transaction CONFIRMÉE IMMÉDIATEMENT via Jito : https://solscan.io/tx/${jitoSignature}`);
+
+        transactionsLog[token.mint] = {
+            ...transactionsLog[token.mint], // Conserve les anciennes valeurs
+            type: 'buy',
+            status: 'confirmed',
+            currentPrice: currentPrice2,
+            percentageChange: ((currentPrice2 - transaction.buyPrice) / transaction.buyPrice) * 100,
+            date: new Date().toISOString()
+            };
+            saveTransactions();
+            console.log(`Achat confirmé avec Jito: https://solscan.io/tx/${jitoSignature}`);
+            return jitoSignature;
+
+    } catch (error) {
+        let transactionsLog = JSON.parse(fs.readFileSync(transactionsFilePath, 'utf8'));
+        // Supprimer le memecoin
+        delete transactionsLog[token.mint];
+        // Sauvegarder le fichier mis à jour
+ fs.writeFileSync(transactionsFilePath, JSON.stringify(transactionsLog, null, 2), 'utf8');
+        console.error("Erreur lors de l'achat:", error);
+    }
+}
+
