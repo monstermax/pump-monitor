@@ -18,7 +18,6 @@ However, her legacy still lives on with us, and $Cocoro is here to respect the l
 }
 
 
-
 export const EDOGE: CreateTokenMetadata = {
     symbol: 'EDOGE',
     name: 'ElonDoge',
@@ -30,8 +29,6 @@ export const EDOGE: CreateTokenMetadata = {
 }
 
 
-
-
 export const BARCAQF: CreateTokenMetadata = {
     symbol: 'BARCAQF',
     name: 'Barça QuarterFinals Pump',
@@ -41,7 +38,6 @@ export const BARCAQF: CreateTokenMetadata = {
     website: '',
     file: async () => fetch('https://indiba.com/fr/wp-content/uploads/sites/5/2023/09/fc-barcelona-profile.jpeg').then((response) => response.blob()),
 }
-
 
 
 export const R10: CreateTokenMetadata = {
@@ -59,14 +55,47 @@ Hold tight and enjoy the ride—because legends never fade! 💎
 }
 
 
-
 export const PWEASE: CreateTokenMetadata = {
     symbol: 'PWEASE',
-    name: 'Pwease Pump (PUMP',
+    name: 'Pwease Pump (PUMP)',
     description: `P: Pwease, pump it U: Unwease, greatness M: Mwassive, gains P: Pwofits, for everyone 🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢🟡🟠🔴🟣🔵🟢`,
     twitter: '',
     telegram: '',
     website: '',
     file: async () => fetch('https://pump.mypinata.cloud/ipfs/QmdgTQrK3CuskpaoyvNaqDcVKtyRdDcNFA1D5nWgAM5XY1?img-width=256&img-dpr=2&img-onerror=redirect').then((response) => response.blob()),
 }
+
+
+export const BUSSY: CreateTokenMetadata = {
+    symbol: 'BUSSY',
+    name: 'Banana Pussy',
+    description: `Banana pussy POWA`,
+    twitter: '',
+    telegram: '',
+    website: 'https://bananapussy.univer.se/',
+    file: async () => fetch('https://pump.mypinata.cloud/ipfs/QmbtGXMUSb7cFfVSGaWcWbry6BF8tih1FTdA67q1KL1cuY?img-width=800&img-dpr=2&img-onerror=redirect').then((response) => response.blob()),
+}
+
+
+export const BTC: CreateTokenMetadata = {
+    symbol: 'BTC',
+    name: 'Butt Tangerine Coin',
+    description: ``,
+    twitter: '',
+    telegram: '',
+    website: '',
+    file: async () => fetch('https://pump.mypinata.cloud/ipfs/QmcHXtyg8dx9AdXvpTDQDcMFxkL45SFrczy4mjJvJTcSRs?img-width=256&img-dpr=2&img-onerror=redirect').then((response) => response.blob()),
+}
+
+
+export const XRPTRUMP: CreateTokenMetadata = {
+    symbol: '$XRPTRUMP',
+    name: '$XRPTRUMP',
+    description: ``,
+    twitter: '',
+    telegram: '',
+    website: '',
+    file: async () => fetch('https://pump.mypinata.cloud/ipfs/QmTRqpiqYAZsxZmoFsqHkTqASinforrZy3LdcciLTnsPx2?img-width=256&img-dpr=2&img-onerror=redirect').then((response) => response.blob()),
+}
+
 

@@ -1,4 +1,4 @@
-// pump_bot_snipe.ts
+// pump_bot_mint_sniper.ts
 
 import WebSocket from 'ws';
 import base58 from 'bs58';

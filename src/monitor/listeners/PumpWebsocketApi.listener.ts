@@ -169,7 +169,8 @@ export class PumpWebsocketApi extends ServiceAbstract {
                         timestamp: message.timestamp ?? new Date(0),
                         instructionIdx: 0,
                         price: (message.vSolInBondingCurve / message.vTokensInBondingCurve).toFixed(10),
-                        dataSource: 'PumpWebsocketApi'
+                        dataSource: 'PumpWebsocketApi',
+                        slot: 0,
                     };
 
                     // Emet à evenement à destination de PumpMonitor
@@ -205,7 +206,8 @@ export class PumpWebsocketApi extends ServiceAbstract {
                             timestamp: new Date(0),
                             instructionIdx: 0,
                             price: (message.vSolInBondingCurve / message.vTokensInBondingCurve).toFixed(10),
-                            dataSource: 'PumpWebsocketApi'
+                            dataSource: 'PumpWebsocketApi',
+                            slot: 0,
                         };
 
                         //this.emit('trade', tradeMessage);

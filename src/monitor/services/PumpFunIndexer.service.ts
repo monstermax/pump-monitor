@@ -1,7 +1,7 @@
 // PumpFunIndexer.service.ts
 
 import WebSocket from "ws";
-import { SendTransactionError, VersionedTransactionResponse } from "@solana/web3.js";
+import { Context, ParsedBlockResponse, SendTransactionError, VersionedTransactionResponse } from "@solana/web3.js";
 
 import { appConfig } from "../../env";
 import { error, log } from "../../lib/utils/console";
@@ -9,11 +9,28 @@ import { WebsocketHandlers, WsConnection } from "../../lib/utils/websocket";
 
 import { PumpTokenInfo, TradeInfo, TransactionDecoder } from "../../lib/pumpfun/pumpfun_tx_decoder";
 import { ServiceAbstract } from "./abstract.service";
-import { BlockNotification } from "../../pump_indexer";
 import { CreateTokenTxResult, TokenTradeTxResult } from "./PumpListener.service";
 import { PUMPFUN_PROGRAM_ID } from "../../lib/pumpfun/pumpfun_config";
 import { buidVersionedMessageFromResponse } from "../../lib/pumpfun/pumpfun_tx_tools";
 
+
+/* ######################################################### */
+
+export interface BlockNotification {
+    jsonrpc: string;
+    method: string;
+    params: {
+        result: {
+            context: Context;
+            value: {
+                slot: number;
+                err: any;
+                block: ParsedBlockResponse;
+            };
+        };
+        subscription: number;
+    };
+}
 
 /* ######################################################### */
 
@@ -115,19 +132,8 @@ export class PumpFunIndexer extends ServiceAbstract {
             if (true) {
                 //const tsStart = Date.now();
 
-                transactions.forEach(txData => {
-                    const txResponse: VersionedTransactionResponse = {
-                        ...txData,
-                        transaction: {
-                            ...txData.transaction,
-                            message: buidVersionedMessageFromResponse(txData.version ?? 'legacy', txData.transaction.message as any)
-                        },
-                        slot,
-                        blockTime,
-                    } as VersionedTransactionResponse;
-
-
-                    const result: PumpTokenInfo | TradeInfo | SendTransactionError | null = decoder.parsePumpTransactionResponse(txResponse);
+                transactionsFormatted.forEach(versionedTx => {
+                    const result: PumpTokenInfo | TradeInfo | SendTransactionError | null = decoder.parsePumpTransactionResponse(versionedTx);
 
                     if (result) {
                         if ('tokenName' in result) {
@@ -145,9 +151,9 @@ export class PumpFunIndexer extends ServiceAbstract {
                             // Trade
                             const tradeTokenData = convertResultToTrade(result);
 
-                            if (this.mints.has(result.tokenAddress)) {
-                                this.emit('trade', tradeTokenData);
-                            }
+                            const hasSeenMint = this.mints.has(result.tokenAddress);
+
+                            this.emit('trade', tradeTokenData, hasSeenMint);
                         }
                     }
                 });
@@ -218,6 +224,7 @@ function convertResultToTrade(result: TradeInfo): TokenTradeTxResult {
         marketCapSol: result.marketCapSol,
         timestamp: result.timestamp,
         dataSource: 'PumpFunIndexer',
+        slot: result.slot,
     };
 
     return tradeTokenData;

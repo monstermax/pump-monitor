@@ -51,6 +51,7 @@ export type TokenTradeTxResult = {
     marketCapSol: number;
     timestamp: Date;
     dataSource: string;
+    slot: number;
 };
 
 
@@ -102,8 +103,8 @@ export class PumpListener extends ServiceAbstract {
                     this.handleNewToken(dataSource, newTokenData, tradeTokenData);
                 }
 
-                const onNewTrade = (tradeTokenData: TokenTradeTxResult) => {
-                    this.handleNewTrade(dataSource, tradeTokenData);
+                const onNewTrade = (tradeTokenData: TokenTradeTxResult, hasSeenMint?: boolean) => {
+                    this.handleNewTrade(dataSource, tradeTokenData, hasSeenMint);
                 }
 
                 this.watchedDataSources.set(dataSource, { listening: false, onNewToken, onNewTrade })
@@ -153,13 +154,15 @@ export class PumpListener extends ServiceAbstract {
         this.emit('new_token_received', token, tradeTokenData);
 
         if (tradeTokenData) {
-            this.handleNewTrade(dataSource, tradeTokenData);
+            this.handleNewTrade(dataSource, tradeTokenData, true);
         }
     }
 
 
-    private async handleNewTrade(dataSource: ServiceAbstract, tradeTokenData: TokenTradeTxResult) {
+    private async handleNewTrade(dataSource: ServiceAbstract, tradeTokenData: TokenTradeTxResult, hasSeenMint?: boolean) {
         //console.log('DEBUG PumpListener: handleTrade', tradeTokenData)
+
+        if (!hasSeenMint) return;
 
         //this.log(`Trade ${tradeTokenData.txType} ${tradeTokenData.mint} ${tradeTokenData.solAmount.toFixed(3)} SOL => détécté par ${tradeTokenData.dataSource}`);
 

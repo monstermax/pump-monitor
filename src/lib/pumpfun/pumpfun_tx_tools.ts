@@ -1,6 +1,6 @@
 // pumpfun_tx_tools.ts
 
-import { Commitment, ComputeBudgetProgram, Connection, Finality, Keypair, Message, MessageV0, ParsedTransactionWithMeta, PublicKey, SendTransactionError, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction, VersionedTransactionResponse } from "@solana/web3.js";
+import { Commitment, CompiledInstruction, Connection, Finality, Message, MessageV0, ParsedInstruction, ParsedMessageAccount, ParsedTransactionWithMeta, PartiallyDecodedInstruction, PublicKey, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction, VersionedTransactionResponse } from "@solana/web3.js";
 import { DEFAULT_COMMITMENT, DEFAULT_FINALITY } from "./pumpfun_config";
 import { retryAsync } from "../utils/promise.util";
 import base58 from "bs58";
@@ -108,6 +108,66 @@ export const fetchParsedTransactionWithRetries = async (connection: Connection, 
 
     return parsedTransaction;
 };
+
+
+
+/** Convertit un ParsedTransactionWithMeta en VersionedTransactionResponse */
+export function convertToVersionedTransactionResponse(
+    parsedTx: ParsedTransactionWithMeta
+): VersionedTransactionResponse {
+
+    // Extraire les informations de base de la transaction
+    const {
+        blockTime,
+        meta,
+        slot,
+        transaction
+    } = parsedTx;
+
+    // Convertir les instructions
+    const message = transaction.message;
+
+    // Créer la structure VersionedTransactionResponse
+    const versionedTx: VersionedTransactionResponse = {
+        blockTime,
+        // @ts-ignore
+        meta: {
+            ...meta,
+            loadedAddresses: meta?.loadedAddresses || {
+                readonly: [],
+                writable: []
+            },
+            postTokenBalances: meta?.postTokenBalances?.map(balance => ({
+                ...balance,
+                mint: balance.mint.toString(),
+                owner: balance.owner?.toString(),
+            })) ?? [],
+        },
+        slot,
+        transaction: {
+            signatures: transaction.signatures,
+            message: {
+                staticAccountKeys: message.accountKeys.map((account: ParsedMessageAccount) => account.pubkey),
+                instructions: message.instructions.map((instruction: ParsedInstruction | PartiallyDecodedInstruction) =>
+                    'programId' in instruction
+                        ? {
+                            programId: instruction.programId,
+                            // @ts-ignore
+                            accounts: instruction.accounts,
+                            // @ts-ignore
+                            data: instruction.data
+                        } as any
+                        : instruction as ParsedInstruction
+                ),
+                recentBlockhash: message.recentBlockhash,
+                addressTableLookups: message.addressTableLookups || [],
+            } as Message,
+        },
+        version: 'legacy'
+    };
+
+    return versionedTx;
+}
 
 
 

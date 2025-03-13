@@ -143,7 +143,7 @@ export async function sendPortalBundleTransaction(
 }
 
 
-// Version simplifiée pour un cas fréquent: acheter le même token avec plusieurs wallets
+/** Acheter le même token avec plusieurs wallets */
 export async function sendPortalMultiBuyTransaction(
     tokenAddress: string,
     wallets: Keypair[],
@@ -173,6 +173,36 @@ export async function sendPortalMultiBuyTransaction(
     return transactionResult;
 }
 
+
+/** Vendre le même token avec plusieurs wallets */
+export async function sendPortalMultiSellTransaction(
+    tokenAddress: string,
+    wallets: Keypair[],
+    tokenAmounts: number[],
+    slippage: number = 10,
+    priorityFee: number = 0.00005
+): Promise<TransactionResult> {
+    if (wallets.length !== tokenAmounts.length || wallets.length === 0 || wallets.length > 5) {
+        throw new Error("Le nombre de wallets doit correspondre au nombre de montants et être entre 1 et 5");
+    }
+
+    const transactionRequests: transactionRequest[] = wallets.map((_, index) => ({
+        walletIndex: index,
+        action: 'sell' as const,
+        mint: tokenAddress,
+        denominatedInSol: false,
+        amount: tokenAmounts[index],
+        slippage
+    }));
+
+    const transactionResult: TransactionResult = await sendPortalBundleTransaction(
+        transactionRequests,
+        wallets,
+        priorityFee
+    );
+
+    return transactionResult;
+}
 
 
 /** Crée un nouveau token et l'achète immédiatement avec plusieurs wallets */

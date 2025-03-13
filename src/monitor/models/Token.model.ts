@@ -117,7 +117,7 @@ export interface TokenMilestone {
 
 
 
-
+/*
 export type TokenMetadata = {
     //uri: string,
     name: string,
@@ -131,4 +131,4 @@ export type TokenMetadata = {
     createdOn: string,
 }
 
-
+*/

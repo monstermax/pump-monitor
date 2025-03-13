@@ -32,6 +32,12 @@ export const appConfig: AppConfig = {
         uri: process.env.MONGODB_URI || '', //'mongodb://localhost:27017',
         dbName: 'pump_monitor_v2',
     },
+    mysql: {
+        host: process.env.DB_HOST ?? '',
+        user: process.env.DB_USER ?? '',
+        password: process.env.DB_PASSWORD ?? '',
+        db: process.env.DB_DB ?? '',
+    },
     solana: {
         rpc: RpcList,
         websocket: process.env.SOLANA_WS || 'ws://api.mainnet-beta.solana.com',
@@ -93,6 +99,12 @@ export type AppConfig = {
     mongodb: {
         uri: string;
         dbName: string;
+    };
+    mysql: {
+        host: string,
+        user: string,
+        password: string,
+        db: string,
     };
     solana: {
         rpc: Record<keyof typeof RpcList, string>;

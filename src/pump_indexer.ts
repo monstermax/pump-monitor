@@ -1,32 +1,11 @@
 // pump_indexer.ts
 
-import { Context, ParsedBlockResponse } from "@solana/web3.js";
-
 import { log, warn, error } from "./lib/utils/console";
 import { ServiceManager } from "./monitor/managers/Service.manager";
 import { PumpFunIndexer } from "./monitor/services/PumpFunIndexer.service";
 import { CreateTokenTxResult, TokenTradeTxResult } from "./monitor/services/PumpListener.service";
 import MySQLClient from "./lib/utils/mysql";
-
-
-/* ######################################################### */
-
-
-export interface BlockNotification {
-    jsonrpc: string;
-    method: string;
-    params: {
-        result: {
-            context: Context;
-            value: {
-                slot: number;
-                err: any;
-                block: ParsedBlockResponse;
-            };
-        };
-        subscription: number;
-    };
-}
+import { appConfig } from "./env";
 
 
 /* ######################################################### */
@@ -36,15 +15,18 @@ async function main() {
 
     log(`Indexer démarré`);
 
-    const db = new MySQLClient({
-        host: 'localhost', // TODO: process.env.DB_HOST
-        user: 'pumpfun', // TODO: process.env.DB_USER
-        password: 'pumpfun', // TODO: process.env.DB_PASSWORD
-        database: 'pumpfun_indexer', // TODO: process.env.DB_DB
-    });
+    const db = appConfig.mysql.host ? new MySQLClient({
+            host: appConfig.mysql.host,
+            user: appConfig.mysql.user,
+            password: appConfig.mysql.password,
+            database: appConfig.mysql.db,
+        }) : fakeDatabase()
 
 
     const indexer = new PumpFunIndexer(new ServiceManager);
+
+    let tradesQueue: TokenTradeTxResult[] = [];
+
 
     indexer.on('create', async (newTokenData: CreateTokenTxResult, initialBuy?: TokenTradeTxResult) => {
         log(`Mint ${newTokenData.mint} ${initialBuy ? `(dev ${initialBuy.solAmount.toFixed(3)} SOL)` : ''}`);
@@ -57,27 +39,66 @@ async function main() {
         }
     })
 
-    indexer.on('trade', async (tradeTokenData: TokenTradeTxResult) => {
+    indexer.on('trade', async (tradeTokenData: TokenTradeTxResult, hasSeenMint?: boolean) => {
+        if (!hasSeenMint) return;
+
         log(`Trade ${tradeTokenData.txType} ${tradeTokenData.mint} ${tradeTokenData.solAmount.toFixed(3)} SOL`);
 
         // save data
-        await db.insert('trades', tradeTokenData);
+        //await db.insert('trades', tradeTokenData);
+        tradesQueue.push(tradeTokenData)
 
-        const tokenUpdate = {
-            vTokensInBondingCurve: tradeTokenData.vTokensInBondingCurve,
-            vSolInBondingCurve: tradeTokenData.vSolInBondingCurve,
-            marketCapSol: tradeTokenData.marketCapSol,
-            updatedAt: tradeTokenData.timestamp,
-        }
+        //console.log('tradeTokenData:', tradeTokenData); process.exit()
 
-        await db.update('tokens', tokenUpdate, `mint = '${tradeTokenData.mint}'`);
+
+        //const tokenUpdate = {
+        //    vTokensInBondingCurve: tradeTokenData.vTokensInBondingCurve,
+        //    vSolInBondingCurve: tradeTokenData.vSolInBondingCurve,
+        //    price: tradeTokenData.vSolInBondingCurve / tradeTokenData.vTokensInBondingCurve,
+        //    marketCapSol: tradeTokenData.marketCapSol,
+        //    updatedAt: tradeTokenData.timestamp,
+        //}
+
+        //await db.update('tokens', tokenUpdate, `mint = '${tradeTokenData.mint}'`);
+
     })
 
     indexer.start();
 
+
+
+    const dequeueIntoDb = async () => {
+        if (tradesQueue.length > 0) {
+            if (tradesQueue.length > 10 || (tradesQueue.at(-1)?.timestamp.getTime() || 0) < Date.now() - 1_000) {
+                const inserts = tradesQueue.slice(0);
+                tradesQueue = [];
+
+                await db.insertMultiple('trades', inserts);
+                console.log(`${inserts.length} trades inserted`)
+            }
+        }
+
+
+        setTimeout(dequeueIntoDb, 500);
+    }
+
+
+    //dequeueIntoDb();
+
 }
 
 
+function fakeDatabase() {
+    const insert = (tableName: string, data: any) => console.log('insert:', data);
+    const insertMultiple = (tableName: string, data: any[]) => console.log('insertMultiple:', data);
+    const update = (tableName: string, data: any, whereClause: string, whereParams: any[] = []) => console.log('update:', data);
+
+    return {
+        insert,
+        insertMultiple,
+        update,
+    }
+}
 
 
 /* ######################################################### */

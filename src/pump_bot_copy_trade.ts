@@ -15,9 +15,9 @@ async function main() {
     //console.log('holders:', holders)
 
 
-    const wallet = Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey));
-    const accounts = await getEmptyTokenAccounts(connection, wallet.publicKey);
-    console.log('accounts:', accounts.map(account => account.mint.toBase58()))
+    //const wallet = Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey));
+    //const accounts = await getEmptyTokenAccounts(connection, wallet.publicKey);
+    //console.log('accounts:', accounts.map(account => account.mint.toBase58()))
 }
 
 

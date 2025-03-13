@@ -81,6 +81,7 @@ export interface TradeInfo {
     timestamp: Date;
     signature: string;
     instructionIdx: number;
+    slot: number;
 }
 
 
@@ -397,6 +398,7 @@ export class TransactionDecoder {
             timestamp: new Date((txData.blockTime ?? 0) * 1000),
             signature: txData.transaction.signatures[0],
             instructionIdx,
+            slot: txData.slot,
         };
 
 
@@ -509,6 +511,7 @@ export class TransactionDecoder {
             timestamp: new Date((txData.blockTime ?? 0) * 1000),
             signature: txData.transaction.signatures[0],
             instructionIdx,
+            slot: txData.slot,
         };
 
 
@@ -919,7 +922,7 @@ export function decodeTradeTransactionFromLogs(tx: ParsedTransactionWithMeta | n
                 const key = `${balance.owner}-${balance.mint}`;
                 const pre = preBalances.get(key) || 0;
                 const post = balance.uiTokenAmount.uiAmount || 0;
-                const diff = post - pre; // TODO?: diviser par 1e6 ?
+                const diff = post - pre;
 
                 if (Math.abs(diff) > 0) {
                     tokenAmount = Math.abs(diff);
@@ -955,7 +958,7 @@ export function decodeTradeTransactionFromLogs(tx: ParsedTransactionWithMeta | n
         }
 
         return {
-            type,
+            type, // TODO: sell/buy semblent inversé. à fixer
             tokenAmount,
             solAmount,
             mint,

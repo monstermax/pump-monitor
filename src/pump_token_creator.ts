@@ -23,19 +23,16 @@ async function main() {
 
     // 0) Configuration
 
-    const tokenMetas = tokensMetasDatabase.EDOGE;
-    const solAmount = 0.5;
+    const tokenMetas = tokensMetasDatabase.XRPTRUMP;
+    const solAmount = 0.3;
 
     const slippage = 5;
     const portalPriorityFee = 0.0001;
     const useJito = true;
 
     const sells = [
-        { delay: 2, percent: 100},
-        //{ delay: 30, percent: 30},
-        //{ delay: 40, percent: 50},
-        //{ delay: 60, percent: 100},
-        //{ delay: 120, percent: 100},
+        { delay: 20, percent: 30},
+        { delay: 30, percent: 100},
     ];
 
 
