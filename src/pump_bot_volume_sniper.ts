@@ -19,7 +19,7 @@ import { sendPortalMultiBuyTransaction, sendPortalMultiSellTransaction } from ".
 
 /*
 Résumé:
-La stratégie écoute en temps réel toutes les transactions Pump.fun et achète les tokens montrant une tendance haussière sur deux slots consécutifs (ratio d'achats >60%, croissance du volume >20%), puis vend rapidement aux premiers signes de faiblesse, généralement en quelques secondes à quelques minutes.
+Ecouter en temps réel toutes les transactions Pump.fun et achèter les tokens montrant une tendance haussière sur deux slots consécutifs (ratio d'achats >60%, croissance du volume >20%), puis vendre rapidement aux premiers signes de faiblesse, généralement en quelques secondes à quelques minutes.
 
 
 Détails:
@@ -55,13 +55,13 @@ type TokenMetrics = {
 
 /* ######################################################### */
 
-const solAmount = 0.1;
+const solAmount = 0.08;
 const slippage = 15;
-const portalPriorityFee = 0.0005;
+const portalPriorityFee = 0.0001;
 
 const minSolInWallet = 0.1;
-const maxDelayBeforeSell = 5;
-const useJito = true;
+const maxDelayBeforeSell = 15;
+const useJito = false;
 
 
 // Configuration des seuils d'analyse et de trading
@@ -88,7 +88,7 @@ const CONFIG = {
     STOP_LOSS_PERCENT: -10,          // Pourcentage de perte pour déclencher un stop loss
     MIN_HOLDING_BUY_RATIO: 0.6,      // Ratio minimum d'achats pour maintenir une position
     MIN_HOLDING_TRADES: 3,           // Nombre minimum de trades pour évaluer le ratio pendant le holding
-    MAX_INACTIVITY_SLOTS: 5          // Nombre maximum de slots sans activité avant de vendre
+    MAX_INACTIVITY_SLOTS: 10,        // Nombre maximum de slots sans activité avant de vendre
 };
 
 
@@ -327,7 +327,7 @@ function analyzeBlockTrades(currentSlot: number, blocksTrades: Map<string, Token
 
 
 async function buyAndSell(tokenAddress: string) {
-    const creatorWallet = Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey));
+    const botWallet = Keypair.fromSecretKey(base58.decode(appConfig.solana.WalletPrivateKey));
     const connection = new Connection(appConfig.solana.rpc.chainstack);
 
 
@@ -336,8 +336,8 @@ async function buyAndSell(tokenAddress: string) {
     };
 
     const buyResult: TransactionResult = useJito
-        ? await sendPortalMultiBuyTransaction(tokenAddress, [creatorWallet], [solAmount], slippage, portalPriorityFee)
-        : await sendPortalBuyTransaction(connection, creatorWallet, tokenAddress, solAmount, slippage, portalPriorityFee);
+        ? await sendPortalMultiBuyTransaction(tokenAddress, [botWallet], [solAmount], slippage, portalPriorityFee)
+        : await sendPortalBuyTransaction(connection, botWallet, tokenAddress, solAmount, slippage, portalPriorityFee);
 
 
     // ACHAT
@@ -355,17 +355,17 @@ async function buyAndSell(tokenAddress: string) {
         return;
     }
 
-    console.log(`Transaction d'achat envoyée`);
+    console.log(`📨 Transaction d'achat envoyée => https://solscan.io/tx/${buyResult.signature}`);
 
     const parsedBuyTransaction: ParsedTransactionWithMeta | null = await fetchParsedTransactionWithRetries(connection, buyResult.signature, onRetry);
 
     if (!parsedBuyTransaction) {
-        warn(`Transaction d'achat non trouvée`);
+        warn(`❌ Transaction d'achat non trouvée`);
         return;
     }
 
 
-    console.log(`Transaction d'achat réceptionnée`);
+    console.log(`📥 Transaction d'achat réceptionnée`);
 
     const versionedBuyTx = convertToVersionedTransactionResponse(parsedBuyTransaction);
     const decodedBuyInstruction: TradeInfo = decoder.parseBuyInstruction(versionedBuyTx);
@@ -400,8 +400,8 @@ async function buyAndSell(tokenAddress: string) {
 
 
     const sellResult: TransactionResult = useJito
-        ? await sendPortalMultiSellTransaction(tokenAddress, [creatorWallet], [solAmount], slippage, portalPriorityFee)
-        : await sendPortalSellTransaction(connection, creatorWallet, tokenAddress, tokenAmount, slippage, portalPriorityFee);
+        ? await sendPortalMultiSellTransaction(tokenAddress, [botWallet], [tokenAmount], slippage, portalPriorityFee)
+        : await sendPortalSellTransaction(connection, botWallet, tokenAddress, tokenAmount, slippage, portalPriorityFee);
 
 
     // 2) wait for transaction response
@@ -411,17 +411,17 @@ async function buyAndSell(tokenAddress: string) {
         return;
     }
 
-    console.log(`Transaction de vente envoyée`);
+    console.log(`📨 Transaction de vente envoyée => https://solscan.io/tx/${buyResult.signature}`);
 
     const parsedSellTransaction: ParsedTransactionWithMeta | null = await fetchParsedTransactionWithRetries(connection, sellResult.signature, onRetry);
 
     if (!parsedSellTransaction) {
-        warn(`Transaction de vente non trouvée`);
+        warn(`❌ Transaction de vente non trouvée`);
         return;
     }
 
 
-    console.log(`Transaction de vente réceptionnée`);
+    console.log(`📥 Transaction de vente réceptionnée`);
 
     const versionedSellTx = convertToVersionedTransactionResponse(parsedSellTransaction);
     const decodedSellInstruction: TradeInfo = decoder.parseSellInstruction(versionedSellTx);
@@ -460,6 +460,10 @@ async function buyAndSell(tokenAddress: string) {
     // Reset all et relancer un cycle
     console.log();
     console.log(`🔁 Lancement d'un nouveau cycle...`);
+    console.log();
+    console.log('#'.repeat(80));
+    console.log();
+
     resetState();
 }
 

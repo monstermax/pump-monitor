@@ -174,7 +174,7 @@ export class PumpWebsocketApi extends ServiceAbstract {
                     };
 
                     // Emet à evenement à destination de PumpMonitor
-                    this.emit('trade', tradeMessage);
+                    this.emit('trade', tradeMessage, this.tokensSubscriptions.has(message.mint));
 
                     // Souscription aux trades du trader initial (pour analyser les wallets. non implémenté)
                     //this.subscribeToTraders([message.traderPublicKey]); // Désactivé pour le moment. A implémenter quand on fera la detection de whales

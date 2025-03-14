@@ -1,6 +1,7 @@
 // TokenManager.service.ts
 
-import { Token, TokenHolder, TokenMetadata, Trade } from "../models/Token.model";
+import { TokenMetadata } from "../../lib/pumpfun/pumpfun_token_metadata";
+import { Token, TokenHolder, Trade } from "../models/Token.model";
 import { ServiceAbstract } from "./abstract.service";
 
 
