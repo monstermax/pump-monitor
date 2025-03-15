@@ -22,6 +22,7 @@ const RpcList = {
     'syndica': process.env.RPC_SYNDICA ?? '', // very slow
     'lavanet': process.env.RPC_LAVANET ?? '', // very slow
     'omnia': process.env.RPC_OMNIA ?? '', // very slow
+    'jito': process.env.RPC_JITO ?? '',
     //'tatum': process.env.RPC_TATUM ?? '', // KO
     //'ankr': process.env.RPC_ANKR ?? '', // KO
 };

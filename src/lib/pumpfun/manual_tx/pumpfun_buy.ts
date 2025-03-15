@@ -1,377 +1,200 @@
 // pumpfun_buy.ts
 
-import { Commitment, Connection, Finality, Keypair, PublicKey, VersionedTransactionResponse, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY, SendTransactionError } from "@solana/web3.js";
-import { createAssociatedTokenAccountInstruction, getAccount, getAssociatedTokenAddress, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram, LAMPORTS_PER_SOL, ComputeBudgetProgram } from "@solana/web3.js";
+import { createAssociatedTokenAccountInstruction, getAccount, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-import { sleep } from "../../utils/time.util";
-import { PriorityFee, sendTransaction, TransactionResult } from "../../solana/solana_tx_sender";
-import { DEFAULT_COMMITMENT, DEFAULT_FINALITY, FEE_RECIPIENT, PUMPFUN_PROGRAM_ID } from "../pumpfun_config";
-import { simulateTransaction } from "../pumpfun_tx_simulation";
-import { getBondingCurvePDA, getTokenBondingCurveAccount } from "../pumpfun_bondingcurve_account";
-import { getGlobalAccountPDA } from "../pumpfun_global_account";
-import { calculateWithSlippageBuy } from "../pumpfun_trading";
+import { DEFAULT_COMMITMENT, DEFAULT_DECIMALS, FEE_RECIPIENT, PUMPFUN_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM, PUMPFUN_PROGRAM_ID } from "../pumpfun_config";
+import { getBondingCurvePDA } from "../pumpfun_bondingcurve_account";
+import { getPriorityFee } from "../../solana/solana_tx_tools";
+import { getOnChainTokenPrice } from "../pumpfun_trading";
+
+/* ######################################################### */
+
+type Token = { 
+    mint: PublicKey,
+    bonding_curve?: PublicKey,
+    associated_bonding_curve?: PublicKey,
+}
+
+
+/* ######################################################### */
+
+const PUMP_GLOBAL = new PublicKey(process.env.PUMP_GLOBAL ?? '');
+const PUMP_EVENT_AUTHORITY = new PublicKey(process.env.PUMP_EVENT_AUTHORITY ?? '');
+const SYSTEM_PROGRAM = new PublicKey("11111111111111111111111111111111");
+const RENT_PROGRAM = new PublicKey(process.env.SYSTEM_RENT ?? '');
+
+
+// Liste des comptes Jito Tip
+const jitoTipAccounts = [
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49"
+];
+
 
 /* ######################################################### */
 
 
-// WARNING : code non fonctionnel. a debuger => les transactions échouent (probleme de programId)
-
-
-export async function pumpFunBuy(
-    connection: Connection,
-    buyer: Keypair,
-    mint: PublicKey,
-    buyAmountSol: bigint,
-    slippageBasisPoints: bigint = 500n,
-    priorityFees?: PriorityFee,
-    commitment: Commitment = DEFAULT_COMMITMENT,
-    finality: Finality = DEFAULT_FINALITY
-): Promise<TransactionResult> {
-
+export async function pumpFunBuy(connection: Connection, jitoConnection: Connection | null, wallet: Keypair, token: Token, amountSol: number, slippage = 0.5, tipAmount = 0.0005) {
     try {
-        console.log(`🔄 Préparation de l'achat de token ${mint.toBase58()} pour ${Number(buyAmountSol) / 1e9} SOL...`);
+        // console.log(`Achat de ${tokenMint} pour ${amountSol} SOL`);
 
-        // Déterminer le programme de token approprié
-        //const tokenProgramId = TOKEN_2022_PROGRAM_ID; //await getTokenProgramId(connection, mint);
-        //console.log(`💱 Programme de token détecté pour ${mint.toBase58()}: ${tokenProgramId.toBase58()}`);
+        let {mint, bonding_curve, associated_bonding_curve } = token;
 
+        if (!bonding_curve || !associated_bonding_curve) {
+            if (! bonding_curve) {
+                bonding_curve = getBondingCurvePDA(mint);
+            }
 
-        // 1) Créer la transaction
-        let buyTx = await getBuyTransactionBySolAmount(
-            connection,
-            buyer.publicKey,
-            mint,
-            buyAmountSol,
-            slippageBasisPoints,
-            commitment
-        );
-
-
-        // 2) Effectuer la simulation de transaction avant l'envoi
-        console.log(`🔍 Simulation de la transaction d'achat...`);
-        const simulation = await simulateTransaction(connection, buyTx, buyer.publicKey, commitment);
-
-        if (!simulation) {
-            throw new Error(`La simulation d'achat a échoué`);
-        }
-
-        // Ajouter des priority fees si spécifié
-        if (priorityFees) {
-            console.log(`💰 Ajout de frais prioritaires: ${priorityFees.unitPrice} microlamports × ${priorityFees.unitLimit} unités`);
-        }
-
-
-        // 3) Envoi de la transaction
-        console.log("Buy simulation successful, sending transaction...");
-
-        let buyResult = await sendTransaction(
-            connection,
-            buyTx,
-            buyer.publicKey,
-            [buyer],
-            priorityFees,
-            commitment,
-            finality
-        );
-
-
-
-        // 4) Analyse du résultat
-        if (buyResult.success) {
-            console.log(`✅ Transaction d'achat réussie: ${buyResult.signature}`);
-
-        } else {
-            console.error(`❌ La transaction d'achat a échoué:`, buyResult.error);
-        }
-
-        return buyResult;
-
-    } catch (err: any) {
-        console.error(`❌ Erreur dans pumpFunBuy:`, err);
-
-        // Fournir un message d'erreur plus descriptif
-        const errorMessage = err instanceof Error ? err.message : String(err);
-
-
-        const errMessage = errorMessage.includes("simulation")
-            ? `Erreur de simulation: ${errorMessage}`
-            : `Erreur d'achat: ${errorMessage}`;
-
-        const error = new SendTransactionError({ action: 'send', signature: '', transactionMessage: errMessage, logs: [] });
-
-        return {
-            success: false,
-            error
-        };
-    }
-}
-
-
-
-
-
-async function getBuyTransactionBySolAmount(
-    connection: Connection,
-    buyer: PublicKey,
-    mint: PublicKey,
-    buyAmountSol: bigint,
-    slippageBasisPoints: bigint = 500n,
-    commitment: Commitment = DEFAULT_COMMITMENT
-) {
-    let attempts = 0;
-    const maxAttempts = 3;
-    let lastError = null;
-
-    while (attempts < maxAttempts) {
-        try {
-            let bondingCurveAccount = await getTokenBondingCurveAccount(
-                connection,
-                mint,
-                commitment
-            );
-
-            if (!bondingCurveAccount) {
-                console.log(`Bonding curve not found, waiting 500ms before retry (attempt ${attempts + 1}/${maxAttempts})`);
-                await sleep(500);
-
-                bondingCurveAccount = await getTokenBondingCurveAccount(
-                    connection,
+            if (! associated_bonding_curve) {
+                associated_bonding_curve = await getAssociatedTokenAddress(
                     mint,
-                    commitment
+                    bonding_curve,
+                    true,
+                    TOKEN_PROGRAM_ID // Toujours standard SPL pour la bonding curve
                 );
-
-                if (!bondingCurveAccount) {
-                    if (attempts >= maxAttempts - 1) {
-                        throw new Error(`[buy failed] Bonding curve account not found: ${mint.toBase58()}`);
-                    }
-                    attempts++;
-                    continue;
-                }
             }
-
-            let buyAmount = bondingCurveAccount.getBuyPrice(buyAmountSol);
-            let buyAmountWithSlippage = calculateWithSlippageBuy(
-                buyAmountSol,
-                slippageBasisPoints
-            );
-
-            //const globalAccount = await getGlobalAccount(connection, commitment);
-            //const globalAccountPubKey = globalAccount.feeRecipient;
-            const globalAccountPubKey = FEE_RECIPIENT; //getGlobalAccountPubKey();
-
-            return await getBuyInstructions(
-                connection,
-                buyer,
-                mint,
-                globalAccountPubKey,
-                buyAmount,
-                buyAmountWithSlippage,
-                commitment
-            );
-
-        } catch (error) {
-            lastError = error;
-            attempts++;
-            console.log(`Error getting buy instructions (attempt ${attempts}/${maxAttempts}):`, error);
-
-            if (attempts >= maxAttempts) {
-                throw lastError;
-            }
-
-            // Wait before retry
-            await sleep(200);
         }
-    }
 
-    // Should never reach here, but TypeScript needs a return
-    throw lastError || new Error('Failed to get buy instructions after multiple attempts');
-}
+        // Récupération du dernier blockhash
+        console.log("Récupération du dernier blockhash...");
+        const { blockhash } = await connection.getLatestBlockhash("confirmed");
+        const priorityFee = await getPriorityFee(connection);
 
-
-//buy
-export async function getBuyInstructions(
-    connection: Connection,
-    buyer: PublicKey,
-    mint: PublicKey,
-    feeRecipient: PublicKey,
-    amount: bigint,
-    solAmount: bigint,
-    commitment: Commitment = DEFAULT_COMMITMENT,
-    skipSimulation = false
-) {
-    try {
-        // Inférer le programme de token pour ce mint
-        const tokenProgramId = TOKEN_2022_PROGRAM_ID; //await inferTokenProgram(connection, mint, commitment);
-        //console.log(`💱 Programme de token inféré: ${tokenProgramId.toBase58()} pour ${mint.toBase58()}`);
-
-
-        // Pour les bonding curves, utiliser toujours le programme TOKEN
-        const bondingCurvePDA = getBondingCurvePDA(mint);
-        console.log(`🔄 Bonding curve PDA: ${bondingCurvePDA.toBase58()}`);
-
-        // Les bonding curves utilisent toujours TOKEN_PROGRAM_ID
-        const associatedBondingCurve = await getAssociatedTokenAddress(
-            mint,
-            bondingCurvePDA,
-            true,
-            TOKEN_PROGRAM_ID // Toujours standard SPL pour la bonding curve
-        );
-        console.log(`📦 Adresse de la bonding curve: ${associatedBondingCurve.toBase58()}`);
-
-
-        // Pour l'ATA de l'utilisateur, utiliser le même programme que celui du mint
-        const associatedUser = await getAssociatedTokenAddress(
-            mint,
-            buyer,
+        // Création de l’ATA pour le nouveau token (car tu achètes toujours un nouveau memecoin)
+        console.log("Création de l'ATA...");
+        const associatedTokenAccount = await getAssociatedTokenAddress(
+            new PublicKey(mint),
+            wallet.publicKey,
             false,
-            tokenProgramId
+            TOKEN_PROGRAM_ID,
+            new PublicKey(PUMPFUN_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM)
         );
-        console.log(`👤 Adresse du compte utilisateur: ${associatedUser.toBase58()}`);
 
+        let createATAInstruction: TransactionInstruction | null = null;
 
-        let transaction = new Transaction();
 
         // Vérifier si l'ATA de l'utilisateur existe déjà
         try {
-            await getAccount(connection, associatedUser, commitment);
+            await getAccount(connection, associatedTokenAccount, DEFAULT_COMMITMENT);
             console.log(`✅ Le compte de token de l'utilisateur existe déjà`);
 
         } catch (e) {
-            console.log(`⏳ Création du compte de token pour l'utilisateur avec le programme: ${tokenProgramId.toBase58()}`);
+            console.log(`⏳ Création du compte de token pour l'utilisateur`);
 
-            // Créer l'ATA
-            transaction.add(
-                createAssociatedTokenAccountInstruction(
-                    buyer,
-                    associatedUser,
-                    buyer,
-                    mint,
-                    tokenProgramId
-                )
+            createATAInstruction = createAssociatedTokenAccountInstruction(
+                wallet.publicKey,
+                associatedTokenAccount,
+                wallet.publicKey,
+                new PublicKey(mint),
+                TOKEN_PROGRAM_ID
             );
         }
 
-        // Maintenant, préparons l'instruction d'achat
-        console.log(`💰 Préparation de l'instruction d'achat pour ${Number(amount) / 1e6} tokens`);
+        // Récupération des détails du token pour calculer l'achat
+        const tokenPriceSol = await getOnChainTokenPrice(connection, new PublicKey(bonding_curve));
+        console.log(`PREMIER PRIX CALCULE POUR LANCER LACHAT ${tokenPriceSol?.toFixed(10)}`);
+        if (!tokenPriceSol) throw new Error("tokenPriceSol invalide")
 
-        // Créer l'instruction manuellement avec les bons programmes
-        const buyInstruction = preparePumpFunBuyInstruction(
-            feeRecipient,
-            mint,
-            bondingCurvePDA,
-            associatedBondingCurve,
-            associatedUser,
-            buyer,
-            amount,
-            solAmount,
-            tokenProgramId // Passer le programme de token détecté
-        );
+        const tokenAmount = amountSol / tokenPriceSol;
+        const amountLamports = Math.ceil(amountSol * LAMPORTS_PER_SOL);
+        const maxAmountLamports = Math.ceil(amountLamports * (1 + (slippage/100)));
 
-        //const buyInstruction = await program.methods
-        //    .buy(new BN(amount.toString()), new BN(solAmount.toString()))
-        //    .accounts({
-        //        feeRecipient,
-        //        mint,
-        //        associatedBondingCurve,
-        //        associatedUser,
-        //        user: buyer,
-        //        tokenProgram: TOKEN_PROGRAM_ID,
-        //    })
-        //    .transaction()
+        // Création des buffers pour l'achat
+        //const discriminator = Buffer.alloc(8);
+        //discriminator.writeBigUInt64LE(BigInt('16927863322537952870'));
+        const discriminator = Buffer.from([102, 6, 61, 18, 1, 218, 235, 234]);
 
-        transaction.add(buyInstruction);
-        console.log(`📝 Transaction d'achat préparée avec ${transaction.instructions.length} instructions`);
+        const tokenAmountBuffer = Buffer.alloc(8);
+        tokenAmountBuffer.writeBigUInt64LE(BigInt(Math.floor(tokenAmount * 10 ** DEFAULT_DECIMALS)));
 
-        if (!skipSimulation) {
-            // Simuler la transaction avant de la renvoyer
-            const simuResult = await simulateTransaction(connection, transaction, buyer, commitment);
-            if (!simuResult) {
-                console.error(`❌ La simulation a échoué, mais on continue pour déboguer`);
-            }
+        const maxAmountLamportsBuffer = Buffer.alloc(8);
+        maxAmountLamportsBuffer.writeBigUInt64LE(BigInt(maxAmountLamports));
+
+        // Création de la transaction d'achat
+        const data = Buffer.concat([discriminator, tokenAmountBuffer, maxAmountLamportsBuffer]);
+
+        const accounts = [
+            { pubkey: PUMP_GLOBAL, isSigner: false, isWritable: false },
+            { pubkey: FEE_RECIPIENT, isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(mint), isSigner: false, isWritable: false },
+            { pubkey: new PublicKey(bonding_curve), isSigner: false, isWritable: true },
+            { pubkey: new PublicKey(associated_bonding_curve), isSigner: false, isWritable: true },
+            { pubkey: associatedTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: SYSTEM_PROGRAM, isSigner: false, isWritable: false },
+            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: RENT_PROGRAM, isSigner: false, isWritable: false },
+            { pubkey: PUMP_EVENT_AUTHORITY, isSigner: false, isWritable: false },
+            { pubkey: new PublicKey(PUMPFUN_PROGRAM_ID), isSigner: false, isWritable: false },
+        ];
+
+        const buyInstruction = new TransactionInstruction({
+            keys: accounts,
+            programId: new PublicKey(PUMPFUN_PROGRAM_ID),
+            data: data,
+        });
+
+
+        // Création de la transaction unique avec toutes les étapes en une seule TX
+        console.log("Construction de la transaction MEV...");
+
+        let transaction: Transaction & { feeCalculator?: { priorityFeeLamports: number } } = new Transaction();
+
+        if (jitoConnection) {
+            // Sélectionner un compte Tip Jito random
+            const randomTipAccount = new PublicKey(jitoTipAccounts[Math.floor(Math.random() * jitoTipAccounts.length)]);
+
+            // Instruction pour Tip Jito
+            const tipInstruction = SystemProgram.transfer({
+                fromPubkey: wallet.publicKey,
+                toPubkey: randomTipAccount,
+                lamports: tipAmount * LAMPORTS_PER_SOL,
+            });
+
+            transaction.add(tipInstruction) // Tip Jito pour inclusion ultra-rapide
+
+        } else {
+            transaction.add(
+                ComputeBudgetProgram.setComputeUnitLimit({
+                    units: 1_000_000 // priorityFees.unitLimit
+                })
+            );
+
+            transaction.add(
+                ComputeBudgetProgram.setComputeUnitPrice({
+                    microLamports: 100 // priorityFees.unitPrice
+                })
+            );
         }
 
-        return transaction;
+        if (createATAInstruction) {
+            transaction.add(createATAInstruction); // Création de l'ATA
+        }
 
-    } catch (error) {
-        console.error(`❌ Erreur dans getBuyInstructions:`, error);
-        throw error;
+        transaction.add(buyInstruction); // Achat
+
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = wallet.publicKey;
+        transaction.feeCalculator = { priorityFeeLamports: priorityFee };
+        transaction.sign(wallet);
+
+        // Envoi de la transaction
+        console.log(`Envoi de la transaction ${jitoConnection ? `(avec Jito) ` : ''}...`);
+        const signature = await (jitoConnection ?? connection).sendRawTransaction(transaction.serialize(), {
+            skipPreflight: true,
+            preflightCommitment: "processed",
+        });
+
+        console.log(`Achat envoyé ${jitoConnection ? `(avec Jito) ` : ''}: https://solscan.io/tx/${signature}`);
+        return signature;
+
+    } catch (err: any) {
+        console.error(`Erreur lors de l'achat: ${err.message}`);
     }
 }
-
-
-
-function preparePumpFunBuyInstruction(
-    feeRecipient: PublicKey,
-    mint: PublicKey,
-    bondingCurve: PublicKey,
-    associatedBondingCurve: PublicKey,
-    associatedUser: PublicKey,
-    user: PublicKey,
-    amount: bigint,
-    solAmount: bigint,
-    tokenProgramId: PublicKey = TOKEN_PROGRAM_ID
-): TransactionInstruction {
-    console.log(`🔧 Préparation manuelle de l'instruction d'achat...`);
-    console.log(`💰 Montant de tokens: ${Number(amount) / 1e6}, Montant SOL: ${Number(solAmount) / 1e9}`);
-    console.log(`🔑 Utilisation du programme de token: ${tokenProgramId.toBase58()}`);
-
-    // Identifiant de l'instruction buy
-    //const INSTRUCTION_IDENTIFIER = Buffer.from('66063d1201daebea', 'hex');
-    const INSTRUCTION_IDENTIFIER = Buffer.from([102, 6, 61, 18, 1, 218, 235, 234]);
-
-
-    // Préparer les tampons pour l'amount et le slippage
-    const tokenAmountBuffer = Buffer.alloc(8);
-    tokenAmountBuffer.writeBigUInt64LE(amount, 0);
-
-    const solAmountBuffer = Buffer.alloc(8);
-    solAmountBuffer.writeBigUInt64LE(solAmount, 0); // maxSolCost
-
-
-    // Concaténer les données de l'instruction
-    const instructionData = Buffer.concat([
-        INSTRUCTION_IDENTIFIER,
-        tokenAmountBuffer,
-        solAmountBuffer
-    ]);
-
-
-    const globalAccountPubKey = getGlobalAccountPDA();
-
-    //const globalAccountPubKey = PublicKey.findProgramAddressSync(
-    //    [Buffer.from("global")],
-    //    new PublicKey(PUMPFUN_PROGRAM_ID)
-    //)[0];
-
-    console.log(`🌐 Compte global: ${globalAccountPubKey.toBase58()}`);
-
-
-    // Liste des comptes requis
-    const keys = [
-        { pubkey: globalAccountPubKey, isSigner: false, isWritable: false },
-        { pubkey: feeRecipient, isSigner: false, isWritable: true },
-        { pubkey: mint, isSigner: false, isWritable: true },
-        { pubkey: bondingCurve, isSigner: false, isWritable: true },
-        { pubkey: associatedBondingCurve, isSigner: false, isWritable: true },
-        { pubkey: associatedUser, isSigner: false, isWritable: true },
-        { pubkey: user, isSigner: true, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // Pour les bonding curves
-        { pubkey: tokenProgramId, isSigner: false, isWritable: false },   // Pour les opérations de token de l'utilisateur
-        { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
-    ];
-
-    console.log(`📑 Liste des comptes préparée avec ${keys.length} comptes`);
-
-    return new TransactionInstruction({
-        keys,
-        programId: new PublicKey(PUMPFUN_PROGRAM_ID), // Adresse du programme Pump.fun
-        data: instructionData
-    });
-}
-
-
-
 
 
 

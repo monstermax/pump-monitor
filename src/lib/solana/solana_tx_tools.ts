@@ -8,6 +8,19 @@ import { PriorityFee } from "./solana_tx_sender";
 
 
 
+/** Ajoute un supplément de paiement pour augmenter les chances d'accélérer la transaction */
+export async function getPriorityFee(connection: Connection) {
+    try {
+        const priorityFee = await connection.getRecentPrioritizationFees();
+        return priorityFee ? (priorityFee[0].prioritizationFee * 1.2) : 10000; // 20% de plus pour garantir l'inclusion rapide
+
+    } catch (er: any) {
+        console.warn("⚠️ Impossible de récupérer le Priority Fee, utilisation par défaut");
+        return 10000; // Valeur par défaut
+    }
+}
+
+
 export async function getDynamicPriorityFee(connection: Connection, type: 'standard' | 'jito' = 'standard'): Promise<number> {
     try {
         // Récupérer les données de performance récentes pour mesurer la congestion
