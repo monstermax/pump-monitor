@@ -233,7 +233,7 @@ async function testSell(tokenAddress: string, useJito?: boolean, minSlot=0) {
     const jitoConnection = !useJito ? null : new Connection(appConfig.solana.rpc.jito, "processed");
 
     const tsStart = Date.now();
-    const tokenAmountRaw = await getTokenBalance(connection, wallet, token.mint.toBase58(), minSlot);
+    const tokenAmountRaw = await getTokenBalance(connection, wallet, token.mint.toBase58(), minSlot); // TODO: mettre un retry sur cette fonction
     const tokenAmount = Number(tokenAmountRaw) / (10 ** DEFAULT_DECIMALS);
     asserts(tokenAmount > 0, `balance token vide @ slot ${minSlot}`);
     console.log('balance:', tokenAmountRaw, tokenAmount)

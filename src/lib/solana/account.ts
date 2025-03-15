@@ -7,6 +7,9 @@ import { AccountLayout } from "@solana/spl-token";
 
 // Méthode pour obtenir le solde d'un token
 export async function getTokenBalance(connection: Connection, wallet: Keypair, tokenAddress: string, minContextSlot?: number): Promise<bigint> {
+
+    // TODO: implémenter un retry (si minContextSlot est fourni)
+
     try {
         // Créer l'adresse du compte de token associé
         const tokenMint = new PublicKey(tokenAddress);
@@ -21,7 +24,7 @@ export async function getTokenBalance(connection: Connection, wallet: Keypair, t
 
         // Parser les données du compte pour obtenir le solde
         const tokenAccount = AccountLayout.decode(tokenAccountInfo.data);
-        const amount = tokenAccount.amount; // Ajuster selon la décimale du token
+        const amount = tokenAccount.amount;
 
         return amount;
 
