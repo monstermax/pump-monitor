@@ -1,0 +1,114 @@
+async function listenForNewTokens() {
+
+    console.log("Démarrage écoute WebSocket blockchain (nouvelles créations uniquement)...");
+
+    const subscriptionId =connection.onLogs(
+        PUMP_PROGRAM,
+        async (logs) => {
+            const { signature, logs: logEntries } = logs;
+            // Charger transactionsLog pour vérifier les achats actifs
+            try {
+                transactionsLog = JSON.parse(fs.readFileSync(transactionsFilePath, 'utf8'));
+            } catch (error) {
+                console.error('Erreur chargement transactionsLog:', error);
+                return;
+            }
+            const pendingTx = Object.entries(transactionsLog).filter(([_, tx]) => tx.status === 'pending');
+            const activeBuysNow = Object.entries(transactionsLog).filter(([_, tx]) => tx.type === 'buy').length;
+
+            if (pendingTx.length > 0) {
+                console.log(` ${pendingTx.length} transactions en attente. Recherche en pause.`);
+                return;
+            }
+
+            if (activeBuysNow >= MAX_ACTIVE_BUYS) {
+                console.log(` Trop de tokens achetés (${activeBuysNow}/${MAX_ACTIVE_BUYS}). Arrêt de l’écoute réseau.`);
+                await connection.removeProgramAccountChangeListener(subscriptionId);
+                return;
+            }
+
+
+            // Filtrer strictement les créations de tokens
+            if (logEntries.includes('Program log: Instruction: Create')) {
+                const tx = await connection.getParsedTransaction(signature, {
+                    maxSupportedTransactionVersion: 0,
+                    commitment: 'confirmed',
+                });
+
+                if (!tx || !tx.transaction || !tx.transaction.message) {
+                    console.log(`[WebSocket Blockchain] Transaction invalide : ${signature}`);
+  return;
+                }
+
+                let tokenMint = null;
+                let bondingCurve = null;
+                let creator = 'UNKNOWN';
+                let solInvested = 0;
+
+
+                // Recherche dynamique de l'instruction "Create" de Pump.fun
+                const pumpInstruction = tx.transaction.message.instructions.find(
+                    instr => instr.programId.equals(PUMP_PROGRAM) && instr.accounts.length >= 8
+                );
+                if (!pumpInstruction) {
+                    console.log(`[WebSocket Blockchain] Aucune instruction "Create" Pump.fun valide dans ${signature}`);
+                    return;
+                }
+                tokenMint = pumpInstruction.accounts[0].toBase58();
+                bondingCurve = pumpInstruction.accounts[2].toBase58();
+                associatedbondingCurve = pumpInstruction.accounts[3].toBase58();
+                creator = pumpInstruction.accounts[7].toBase58();
+
+
+
+console.log(`TOKEN MINT : ${tokenMint}`);
+console.log(`TOKEN MINT : ${bondingCurve}`);
+console.log(`TOKEN MINT : ${creator}`);
+
+                // Utiliser fetchTokenDetails pour obtenir name et symbol
+                let name = 'Token_' + tokenMint.slice(0, 8); // Valeur par défaut
+                let symbol = 'UNK'; // Valeur par défaut
+
+                // Étape 2 : Aller directement à Inner Instruction Set #2, Inner Instruction #1 pour l’investissement
+                if (tokenMint && tokenMint.endsWith('pump')) {
+                    console.log(`TOKEN MINT : ${tokenMint}`);
+                    if (tx.meta.innerInstructions && tx.meta.innerInstructions.length > 2 && tx.meta.innerInstructions[2].instructions.length > 1) {
+                        const investInstruction = tx.meta.innerInstructions[2].instructions[1];
+                        if (investInstruction.programId.equals(SYSTEM_PROGRAM) && investInstruction.parsed && investInstruction.parsed.type === 'transfer') {
+                            const { source, lamports } = investInstruction.parsed.info;
+                            console.log(`[WebSocket Blockchain] Transfert détecté (inner #2, #1) - Source: ${source}, Montant: ${(lamports / LAMPORTS_PER_SOL).toFixed(2)} SOL`);
+                            if (source === creator) {
+                                solInvested = lamports / LAMPORTS_PER_SOL;
+                                console.log(`[WebSocket Blockchain] Étape 2 - Créateur ${creator} a investi ${solInvested.toFixed(2)} SOL`);
+                            } else {
+                             //   console.log(`[WebSocket Blockchain] Source ${source} ne correspond pas au créateur ${creator}`);
+ }
+                        } else {
+                           // console.log(`[WebSocket Blockchain] Inner Instruction #2, #1 n’est pas un transfert valide`);
+                        }
+                    } else {
+                      //  console.log(`[WebSocket Blockchain] Pas assez d’inner instructions pour atteindre Set #2, Instruction #1`);
+                    }
+
+                    if (solInvested < MIN_CREATOR_INVESTMENT) {
+                        console.log(`[WebSocket Blockchain] Nouveau token Pump.fun détecté : ${tokenMint} à ${new Date().toISOString()} (Investissement: ${solInvested.toFixed(2)} SOL)`);
+                        const token = {
+                            mint: tokenMint,
+                            name: name,
+                            symbol: symbol,
+                            bonding_curve: bondingCurve || 'UNKNOWN',
+                            associated_bonding_curve: associatedbondingCurve || 'UNKNOWN',
+                            creator: creator,
+                        };
+                        await sniper(token, 'blockchain');
+                    } else {
+                        console.log(`[WebSocket Blockchain] Token ${tokenMint} ignoré (investissement ${solInvested.toFixed(2)} SOL < ${MIN_CREATOR_INVESTMENT} SOL)`);
+                    }
+                } else {
+                    console.log(`[WebSocket Blockchain] Aucun token "pump" valide dans ${signature}`);
+                }
+            }
+        },
+        'confirmed'
+    );
+}
