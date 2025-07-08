@@ -111,7 +111,7 @@ export class WebApp extends ServiceAbstract {
 
     startWebserver(): http.Server<typeof http.IncomingMessage, typeof http.ServerResponse> {
         const app = express();
-        const PORT = process.env.PORT || 3000;
+        const PORT = process.env.HTTP_API_PORT || 3048;
 
         app.use(cors());
         app.use(express.json());

@@ -4,8 +4,7 @@ import React, { createContext, ReactNode, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
 
-//const wsUrl = 'http://localhost:3000';
-const wsUrl = 'https://dev3000.dev.karmas.fr';
+const wsUrl = import.meta.env.VITE_WS_URL;
 
 
 // Créer le contexte
