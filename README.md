@@ -49,6 +49,11 @@ MIT
 ## Screenshots & Demo
 
 ### Video demo  
+
+
+https://github.com/user-attachments/assets/b815dfe9-9312-4c13-8725-3b36b70d3387
+
+
 📽️ [`pumpmonitor.mp4`](./screenshots/pumpmonitor.mp4)
 
 ### Screenshots  
