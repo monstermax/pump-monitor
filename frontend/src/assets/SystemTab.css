@@ -1,0 +1,159 @@
+/* SystemTab.css */
+
+.system-container {
+    width: 100%;
+    padding: 20px;
+    color: #eee;
+}
+
+.system-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.system-title {
+    color: #0f0;
+    font-size: 24px;
+    margin: 0;
+    font-weight: 600;
+}
+
+.system-last-update {
+    color: #aaa;
+    font-size: 14px;
+}
+
+.system-stats-grid {
+    display: flex;
+    gap: 20px;
+}
+
+.system-stats-column {
+    flex: 1;
+    min-width: 300px;
+}
+
+.stats-section-header {
+    background-color: #222;
+    padding: 10px 15px;
+    font-size: 16px;
+    font-weight: 500;
+    color: white;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.stats-section-header div.stat-info {
+    font-size: 13px;
+    color: #999;
+    font-weight: normal;
+}
+
+.stat-item {
+    background-color: #1a1a1a;
+    margin-bottom: 10px;
+    padding: 10px 15px;
+    border-radius: 4px;
+}
+
+.stat-label {
+    color: #ccc;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.stat-bar-container {
+    height: 6px;
+    background-color: #333;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.stat-bar {
+    height: 100%;
+    width: 0;
+    transition: width 0.5s ease;
+}
+
+.stat-value {
+    text-align: right;
+    color: white;
+    font-size: 14px;
+}
+
+.load-text {
+    color: #999;
+    margin-left: 5px;
+    font-size: 13px;
+}
+
+/* Couleurs des barres */
+.stat-bar.blue {
+    background-color: #3498db;
+}
+
+.stat-bar.green {
+    background-color: #2ecc71;
+}
+
+.stat-bar.red {
+    background-color: #e74c3c;
+}
+
+.stat-bar.orange {
+    background-color: #e67e22;
+}
+
+.stat-bar.white {
+    background-color: #f5f5f5;
+}
+
+/* États d'alerte */
+.stat-bar.warning {
+    background-color: #e67e22;
+}
+
+.stat-bar.critical {
+    background-color: #e74c3c;
+}
+
+/* Styles spéciaux */
+.uptime {
+    color: #39f;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.large-number {
+    color: #39f;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.total-trades .stat-label {
+    margin-bottom: 15px;
+}
+
+/* Animation pour les barres critiques */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.stat-bar.critical {
+    animation: pulse 2s infinite;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .system-stats-grid {
+        flex-direction: column;
+    }
+}

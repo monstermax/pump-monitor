@@ -1,0 +1,70 @@
+/* TokensMonitorLists.css */
+
+
+/* Lists styling */
+.tokens-list,
+.trades-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.list-headers {
+    display: flex;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg-lighter);
+}
+
+.scrollable-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.token-item,
+.trade-item {
+    display: flex;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.token-item:hover,
+.trade-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.token-item.selected {
+    background-color: rgba(49, 130, 206, 0.2);
+}
+
+
+
+/* Empty state */
+.empty-list,
+.no-selection,
+.loading,
+.no-data,
+.no-trades,
+.no-milestones {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 2rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.no-data,
+.no-trades,
+.no-milestones {
+    height: auto;
+    padding: 1rem;
+}
+
+

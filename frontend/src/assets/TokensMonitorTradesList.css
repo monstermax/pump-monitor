@@ -1,0 +1,50 @@
+
+
+
+/* Trade list columns */
+.trade-time {
+    width: 25%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trade-type {
+    width: 15%;
+    font-weight: 600;
+}
+
+
+.trade-token,
+.trade-trader {
+    width: 25%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trade-amount {
+    width: 15%;
+    text-align: right;
+}
+
+.trade-price {
+    width: 20%;
+    text-align: right;
+}
+
+
+
+/* Trade item styles */
+.buy-trade {
+    color: var(--color-buy);
+}
+
+.sell-trade {
+    color: var(--color-sell);
+}
+
+.create-trade {
+    color: var(--color-accent);
+}
+

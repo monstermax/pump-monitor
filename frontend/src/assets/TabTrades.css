@@ -1,0 +1,94 @@
+/* TabTrades.css */
+
+.token-trades-tab {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    /* Prend toute la hauteur disponible */
+    padding: 0;
+    /* Supprime le padding pour maximiser l'espace */
+}
+
+.trades-list-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    /* Prend tout l'espace disponible */
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.trades-header {
+    display: flex;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg-lighter);
+}
+
+.trades-scrollable {
+    flex: 1;
+    /* Prend tout l'espace disponible */
+    overflow-y: auto;
+}
+
+.trades-row {
+    display: flex;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* Trade columns */
+.trades-col {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trades-time {
+    width: 25%;
+}
+
+.trades-type {
+    width: 15%;
+    font-weight: 600;
+}
+
+.trades-trader {
+    width: 15%;
+}
+
+.trades-trader.me {
+    color: #bec671;
+}
+
+.trades-volume {
+    width: 15%;
+    text-align: right;
+}
+
+.trades-amount {
+    width: 15%;
+    text-align: right;
+}
+
+.trades-price {
+    width: 15%;
+    text-align: right;
+}
+
+/* Types de trades */
+.trades-row.buy-trade {
+    color: var(--color-buy);
+}
+
+.trades-row.sell-trade {
+    color: var(--color-sell);
+}
+
+.trades-row.create-trade {
+    color: var(--color-accent);
+}

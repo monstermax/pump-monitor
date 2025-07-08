@@ -1,0 +1,267 @@
+/* TokensMonitorTokenDetails_buysell.css */
+
+
+/* Styles pour l'onglet Trade (Buy/Sell) */
+
+.token-trade {
+    padding: 20px 0;
+}
+
+.token-trade h3 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #fff;
+}
+
+.token-trade-info {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 15px;
+}
+
+.trade-price-info {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #333;
+}
+
+.info-item {
+    margin-bottom: 10px;
+}
+
+.info-label {
+    color: #999;
+    margin-right: 8px;
+}
+
+.info-value {
+    font-weight: 600;
+}
+
+.trade-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.trade-type-selector {
+    display: flex;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.type-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    background-color: #333;
+    color: #ccc;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.type-btn:hover {
+    background-color: #444;
+}
+
+.type-btn.active {
+    color: white;
+    font-weight: 600;
+}
+
+.type-btn:first-child.active {
+    background-color: #2ecc71;
+}
+
+.type-btn:last-child.active {
+    background-color: #e74c3c;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-size: 14px;
+    color: #ccc;
+}
+
+.input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    padding-right: 60px;
+    /* Espace pour le bouton MAX */
+    border-radius: 4px;
+    border: 1px solid #444;
+    background-color: #222;
+    color: white;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+/* Remplacer le style .max-btn par les styles suivants */
+
+.input-controls {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 4px;
+}
+
+.input-control-btn {
+    background-color: #444;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.input-control-btn:hover {
+    background-color: #555;
+}
+
+.estimated-receive {
+    font-size: 14px;
+    color: #bbb;
+    margin: 10px 0;
+}
+
+.estimated-receive strong {
+    color: #fff;
+}
+
+.submit-btn {
+    padding: 12px;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 10px;
+}
+
+.buy-btn {
+    background-color: #2ecc71;
+}
+
+.buy-btn:hover {
+    background-color: #27ae60;
+}
+
+.sell-btn {
+    background-color: #e74c3c;
+}
+
+.sell-btn:hover {
+    background-color: #c0392b;
+}
+
+.trade-status {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.trade-status.pending {
+    background-color: #2c3e50;
+    color: #3498db;
+}
+
+.trade-status.success {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.trade-status.error {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.trade-recommendation {
+    margin-top: 30px;
+    padding: 15px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+}
+
+.trade-recommendation h4 {
+    font-size: 16px;
+    margin-bottom: 10px;
+    color: #ccc;
+}
+
+.recommendation-tag {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.recommendation-tag.buy {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.recommendation-tag.sell {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.recommendation-tag.hold {
+    background-color: rgba(241, 196, 15, 0.2);
+    color: #f1c40f;
+}
+
+.entry-points {
+    margin-top: 10px;
+    font-size: 14px;
+    font-weight: normal;
+}
+
+.entry-point {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 4px 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+/* Media Queries */
+@media (max-width: 768px) {
+    .trade-price-info {
+        flex-direction: column;
+    }
+
+    .trade-form {
+        max-width: 100%;
+    }
+}

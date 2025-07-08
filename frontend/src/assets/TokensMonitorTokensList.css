@@ -1,0 +1,94 @@
+
+
+
+
+
+/* Token list columns */
+.token-time {
+    width: 20%;
+    min-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.token-symbol {
+    width: 15%;
+    min-width: 70px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.token-name {
+    width: 25%;
+    min-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.token-price {
+    width: 15%;
+    min-width: 100px;
+    text-align: right;
+}
+
+.token-cap {
+    width: 10%;
+    min-width: 100px;
+    text-align: right;
+}
+
+.token-trades {
+    width: 5%;
+    min-width: 60px;
+    text-align: right;
+}
+
+
+.token-holders-count {
+    width: 5%;
+    min-width: 60px;
+    text-align: right;
+}
+
+
+
+
+
+/* Styles pour les prix en hausse/baisse */
+.token-price.price-up {
+    color: #4caf50; /* Vert pour prix en hausse */
+}
+
+.token-price.price-down {
+    color: #f44336; /* Rouge pour prix en baisse */
+}
+
+/* Ajustement de la largeur de la colonne price */
+.token-price {
+    min-width: 100px;
+    text-align: right;
+}
+
+/* Mise à jour de la largeur des autres colonnes si nécessaire */
+.token-time {
+    min-width: 150px;
+}
+
+.token-symbol {
+    min-width: 70px;
+}
+
+.token-name {
+    flex: 1;
+    min-width: 150px;
+}
+
+.token-cap {
+    min-width: 100px;
+    text-align: right;
+}
+
